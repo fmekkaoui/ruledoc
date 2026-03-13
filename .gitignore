@@ -1,0 +1,28 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Generated docs (local dev only)
+BUSINESS_RULES.md
+BUSINESS_RULES.json
+BUSINESS_RULES.html
+
+# Drafts
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage
+coverage/
+
+# Allow example outputs
+!examples/**/BUSINESS_RULES.md
+!examples/**/BUSINESS_RULES.json

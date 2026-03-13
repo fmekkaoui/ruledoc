@@ -1,0 +1,5 @@
+{
+  "src": "./src",
+  "output": "./BUSINESS_RULES.md",
+  "formats": ["md", "json"]
+}

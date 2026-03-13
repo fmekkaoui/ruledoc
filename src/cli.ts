@@ -1,0 +1,290 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { ConfigError, resolveConfig } from "./config.js";
+import { computeDiff, loadPreviousRules } from "./diff.js";
+import { generateHTML } from "./output/html.js";
+import { generateJSON } from "./output/json.js";
+import { generateMarkdown } from "./output/markdown.js";
+import { extractRules } from "./parser.js";
+import { capitalize } from "./tree.js";
+import type { Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
+
+// ---------------------------------------------------------------------------
+// Colors
+// ---------------------------------------------------------------------------
+
+const k = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  cyan: "\x1b[36m",
+};
+
+const noColor = !!process.env.NO_COLOR || !process.stdout.isTTY;
+const c = noColor ? (Object.fromEntries(Object.keys(k).map((key) => [key, ""])) as typeof k) : k;
+
+// ---------------------------------------------------------------------------
+// Logger (respects quiet/verbose)
+// ---------------------------------------------------------------------------
+
+function createLogger(quiet: boolean) {
+  return {
+    log: quiet ? () => {} : console.log.bind(console),
+    error: console.error.bind(console), // errors always show
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Help
+// ---------------------------------------------------------------------------
+
+const LOGO = `
+${c.dim}┌─┐┬ ┬┬  ┌─┐┌┬┐┌─┐┌─┐
+├┬┘│ ││  ├┤  │││ ││
+┴└─└─┘┴─┘└─┘─┴┘└─┘└─┘${c.reset}`;
+
+const HELP = `${LOGO}
+
+${c.bold}ruledoc${c.reset} — Extract @rule() annotations into living documentation.
+
+${c.bold}Usage:${c.reset}
+  ruledoc [options]
+  ruledoc [src] [output]
+
+${c.bold}Options:${c.reset}
+  -s, --src <dir>           Source directory (default: ./src)
+  -o, --output <file>       Output file (default: ./BUSINESS_RULES.md)
+  -f, --format <formats>    md,json,html (default: md,json)
+  -e, --extensions <exts>   .ts,.vue,.py (default: .ts,.tsx,.js,.jsx,.mjs,.cjs,.vue,.svelte)
+      --ignore <dirs>       Directories to skip
+  -t, --tag <name>          Annotation tag (default: rule → @rule(...))
+      --severities <list>   Severity levels, first is default (default: info,warning,critical)
+  -p, --pattern <regex>     Custom regex (overrides --tag)
+  -c, --check               CI mode: exit 1 if docs are stale
+  -q, --quiet               Suppress all output except errors
+      --verbose             List every rule found
+      --init                Setup guide and example config
+  -h, --help                Show this help
+  -v, --version             Show version
+
+${c.bold}Annotation format:${c.reset}
+  // @rule(scope): Description
+  // @rule(scope.sub): With subscope
+  // @rule(scope.sub, critical): With severity
+  // @rule(scope.sub, critical, TICKET-123): With ticket
+  // @rule(scope.sub, TICKET-123, critical): Order doesn't matter
+  // @rule(scope.sub, TICKET-123): Severity defaults to first in --severities
+
+${c.bold}Config:${c.reset}
+  Reads from: ruledoc.config.json → package.json "ruledoc" → CLI flags
+`;
+
+const VERSION = "0.1.1";
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+function runInit() {
+  console.log(`\n${c.cyan}ruledoc init${c.reset}\n`);
+  console.log(`Add annotations like these to your source files:\n`);
+  console.log(
+    c.dim +
+      [
+        "  // @rule(billing.plans, critical): Free plan limited to 50 items",
+        "  // @rule(auth.session): Session expires after 24h",
+        "  // @rule(auth.password, warning, AUTH-42): Min 8 chars",
+        "  // @rule(billing.trial, FLEW-102): Trial lasts 14 days",
+      ].join("\n") +
+      c.reset,
+  );
+  console.log(`\nThen run ${c.bold}ruledoc${c.reset} to generate documentation.\n`);
+
+  if (!existsSync("ruledoc.config.json")) {
+    writeFileSync(
+      "ruledoc.config.json",
+      `${JSON.stringify({ src: "./src", output: "./BUSINESS_RULES.md", formats: ["md", "json"] }, null, 2)}\n`,
+    );
+    console.log(`${c.green}✓${c.reset} Created ruledoc.config.json`);
+  }
+
+  console.log(
+    `${c.green}✓${c.reset} Add ${c.bold}BUSINESS_RULES.md${c.reset} and ${c.bold}BUSINESS_RULES.json${c.reset} to your .gitignore\n`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Print helpers
+// ---------------------------------------------------------------------------
+
+function sevIcon(sev: string): string {
+  switch (sev) {
+    case "critical":
+      return c.red;
+    case "warning":
+      return c.yellow;
+    default:
+      return c.blue;
+  }
+}
+
+function printDiff(log: ReturnType<typeof createLogger>, diff: RuleDiff) {
+  for (const r of diff.added) {
+    log.log(
+      `  ${c.green}+${c.reset} ${r.description} ${sevIcon(r.severity)}[${r.severity}]${c.reset} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`,
+    );
+  }
+  for (const r of diff.removed) {
+    log.log(`  ${c.red}-${c.reset} ${r.description} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`);
+  }
+}
+
+function printWarnings(log: ReturnType<typeof createLogger>, warnings: RuleWarning[]) {
+  if (warnings.length === 0) return;
+  log.log("");
+  for (const w of warnings) {
+    log.log(`  ${c.yellow}⚠${c.reset} ${c.dim}${w.file}:${w.line}${c.reset} — ${w.message}`);
+  }
+}
+
+function printVerbose(log: ReturnType<typeof createLogger>, rules: Rule[]) {
+  if (rules.length === 0) return;
+
+  log.log("");
+
+  // Group by scope
+  const grouped = new Map<string, Rule[]>();
+  for (const r of rules) {
+    const list = grouped.get(r.scope) || [];
+    list.push(r);
+    grouped.set(r.scope, list);
+  }
+
+  for (const [scope, scopeRules] of [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    log.log(`  ${c.bold}${capitalize(scope)}${c.reset} ${c.dim}(${scopeRules.length})${c.reset}`);
+
+    for (const r of scopeRules) {
+      const sev = sevIcon(r.severity);
+      const sevTag = r.severity !== "info" ? `${sev}[${r.severity}]${c.reset} ` : "";
+      const tkt = r.ticket ? ` ${c.dim}${r.ticket}${c.reset}` : "";
+      log.log(`    ${sev}●${c.reset} ${sevTag}${r.description}${tkt} ${c.dim}→ ${r.file}:${r.line}${c.reset}`);
+    }
+  }
+  log.log("");
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+function main() {
+  const args = process.argv.slice(2);
+
+  // Handle flags that don't need config
+  if (args.includes("-h") || args.includes("--help")) {
+    console.log(HELP);
+    process.exit(0);
+  }
+  if (args.includes("-v") || args.includes("--version")) {
+    console.log(VERSION);
+    process.exit(0);
+  }
+  if (args.includes("--init")) {
+    runInit();
+    process.exit(0);
+  }
+
+  // Resolve and validate config
+  let config: RuledocConfig;
+  try {
+    config = resolveConfig(args);
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`\n${c.red}✗ ${err.message}${c.reset}\n`);
+      process.exit(1);
+    }
+    throw err;
+  }
+
+  const log = createLogger(config.quiet);
+
+  if (!existsSync(config.src)) {
+    log.error(`${c.red}✗ Source directory "${config.src}" not found${c.reset}`);
+    process.exit(1);
+  }
+
+  // Extract
+  const { rules, warnings } = extractRules(config);
+
+  // Stats
+  const scopes = new Set(rules.map((r) => r.scope));
+  const critical = rules.filter((r) => r.severity === "critical").length;
+  const warning = rules.filter((r) => r.severity === "warning").length;
+
+  log.log(
+    `${c.cyan}◆ ruledoc${c.reset} ${c.bold}${rules.length}${c.reset} rules · ` +
+      `${scopes.size} scopes` +
+      `${critical ? ` · ${c.red}${critical} critical${c.reset}` : ""}` +
+      `${warning ? ` · ${c.yellow}${warning} warning${c.reset}` : ""}`,
+  );
+
+  // Verbose: list all rules
+  if (config.verbose) {
+    printVerbose(log, rules);
+  }
+
+  // Diff
+  const jsonPath = config.output.replace(/\.md$/, ".json");
+  const prev = loadPreviousRules(jsonPath);
+  const diff = computeDiff(prev, rules);
+  const hasChanges = diff.added.length > 0 || diff.removed.length > 0;
+
+  if (prev.length > 0 && hasChanges) {
+    printDiff(log, diff);
+  }
+
+  // Warnings
+  printWarnings(log, warnings);
+
+  // Check mode (CI)
+  if (config.check) {
+    if (existsSync(config.output)) {
+      const existing = readFileSync(config.output, "utf-8");
+      const fresh = generateMarkdown(rules, warnings, config.src);
+      if (existing !== fresh) {
+        log.error(`\n${c.red}✗ BUSINESS_RULES.md is stale. Run ruledoc to regenerate.${c.reset}`);
+        process.exit(1);
+      }
+    }
+    log.log(`\n${c.green}✓ Docs are up to date${c.reset}`);
+    process.exit(0);
+  }
+
+  // Generate outputs
+  const outputs: string[] = [];
+
+  if (config.formats.includes("md")) {
+    writeFileSync(config.output, generateMarkdown(rules, warnings, config.src));
+    outputs.push(config.output);
+  }
+
+  if (config.formats.includes("json")) {
+    writeFileSync(jsonPath, generateJSON(rules, warnings));
+    outputs.push(jsonPath);
+  }
+
+  if (config.formats.includes("html")) {
+    const htmlPath = config.output.replace(/\.md$/, ".html");
+    writeFileSync(htmlPath, generateHTML(rules, warnings, config.src));
+    outputs.push(htmlPath);
+  }
+
+  for (const o of outputs) {
+    log.log(`${c.dim}  → ${o}${c.reset}`);
+  }
+}
+
+main();
