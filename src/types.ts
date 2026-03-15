@@ -41,6 +41,21 @@ export interface RuleDiff {
 }
 
 // ---------------------------------------------------------------------------
+// History (tombstones for removed rules)
+// ---------------------------------------------------------------------------
+
+export interface HistoryEntry {
+  removedAt: string;
+  rule: {
+    scope: string;
+    severity: string;
+    description: string;
+    lastFile: string;
+    lastLine: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Warning
 // ---------------------------------------------------------------------------
 
@@ -91,6 +106,9 @@ export interface RuledocConfig {
 
   /** List every rule found in terminal output. */
   verbose: boolean;
+
+  /** Track removed rules in BUSINESS_RULES_HISTORY.json. */
+  history: boolean;
 }
 
 export const DEFAULT_SEVERITIES = ["info", "warning", "critical"];
@@ -119,6 +137,7 @@ export const DEFAULT_CONFIG: RuledocConfig = {
   check: false,
   quiet: false,
   verbose: false,
+  history: true,
 };
 
 // ---------------------------------------------------------------------------

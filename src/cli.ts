@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ConfigError, resolveConfig } from "./config.js";
-import { computeDiff, loadPreviousRules } from "./diff.js";
+import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
 import { generateHTML } from "./output/html.js";
 import { generateJSON } from "./output/json.js";
 import { generateMarkdown } from "./output/markdown.js";
 import { extractRules } from "./parser.js";
 import { capitalize } from "./tree.js";
-import type { Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
+import type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Colors
@@ -65,6 +65,7 @@ ${c.bold}Options:${c.reset}
   -p, --pattern <regex>     Custom regex (overrides --tag)
   -c, --check               CI mode: exit 1 if docs are stale
   -q, --quiet               Suppress all output except errors
+      --no-history          Don't track removed rules in history file
       --verbose             List every rule found
       --init                Setup guide and example config
   -h, --help                Show this help
@@ -246,6 +247,18 @@ function main() {
     printDiff(log, diff);
   }
 
+  // History (tombstones for removed rules)
+  const historyPath = config.output.replace(/\.md$/, "_HISTORY.json");
+  let history: HistoryEntry[] = [];
+
+  if (config.history) {
+    if (diff.removed.length > 0) {
+      history = appendHistory(historyPath, diff.removed);
+    } else {
+      history = loadHistory(historyPath);
+    }
+  }
+
   // Warnings
   printWarnings(log, warnings);
 
@@ -253,7 +266,7 @@ function main() {
   if (config.check) {
     if (existsSync(config.output)) {
       const existing = readFileSync(config.output, "utf-8");
-      const fresh = generateMarkdown(rules, warnings, config.src);
+      const fresh = generateMarkdown(rules, warnings, config.src, history);
       if (existing !== fresh) {
         log.error(`\n${c.red}✗ BUSINESS_RULES.md is stale. Run ruledoc to regenerate.${c.reset}`);
         process.exit(1);
@@ -267,7 +280,7 @@ function main() {
   const outputs: string[] = [];
 
   if (config.formats.includes("md")) {
-    writeFileSync(config.output, generateMarkdown(rules, warnings, config.src));
+    writeFileSync(config.output, generateMarkdown(rules, warnings, config.src, history));
     outputs.push(config.output);
   }
 

@@ -127,6 +127,10 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
         config.verbose = true;
         break;
 
+      case "--no-history":
+        config.history = false;
+        break;
+
       default:
         if (!arg.startsWith("-")) {
           if (!config.src) config.src = arg;
@@ -251,6 +255,7 @@ export function resolveConfig(args: string[], cwd: string = process.cwd()): Rule
     check: cliConfig.check ?? fileConfig.check ?? DEFAULT_CONFIG.check,
     quiet: cliConfig.quiet ?? fileConfig.quiet ?? DEFAULT_CONFIG.quiet,
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,
+    history: cliConfig.history ?? fileConfig.history ?? DEFAULT_CONFIG.history,
   };
 
   validate(config);

@@ -491,6 +491,72 @@ describe("cli", () => {
     });
   });
 
+  describe("history", () => {
+    it("creates history file when rules are removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with a rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing): Old rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+
+      // Remove the rule
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(true);
+      const history = JSON.parse(readFileSync(historyPath, "utf-8"));
+      expect(history).toHaveLength(1);
+      expect(history[0].rule.description).toBe("Old rule");
+
+      // Markdown should have Removed Rules section
+      const md = readFileSync(outMd, "utf-8");
+      expect(md).toContain("Removed Rules");
+      expect(md).toContain("Old rule");
+    });
+
+    it("does not create history file with --no-history", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with a rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing): Old rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+
+      // Remove the rule with --no-history
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--no-history"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(false);
+
+      // Markdown should NOT have Removed Rules section
+      const md = readFileSync(outMd, "utf-8");
+      expect(md).not.toContain("Removed Rules");
+    });
+
+    it("does not create history file when no rules are removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): My rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(false);
+    });
+  });
+
   describe("no diff printed when no previous rules exist", () => {
     it("does not print diff on first run", async () => {
       const srcDir = join(tmpDir, "src");

@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { computeDiff, loadPreviousRules } from "./diff.js";
+import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
 import type { Rule } from "./types.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
@@ -90,5 +90,66 @@ describe("computeDiff", () => {
     expect(diff.added[0].description).toBe("added");
     expect(diff.removed).toHaveLength(1);
     expect(diff.removed[0].description).toBe("removed");
+  });
+});
+
+describe("loadHistory", () => {
+  it("returns [] for non-existent file", () => {
+    expect(loadHistory(join(tmpDir, "no-history.json"))).toEqual([]);
+  });
+
+  it("returns [] for invalid JSON", () => {
+    const file = join(tmpDir, "bad-history.json");
+    writeFileSync(file, "not json");
+    expect(loadHistory(file)).toEqual([]);
+  });
+
+  it("returns [] for non-array JSON", () => {
+    const file = join(tmpDir, "obj-history.json");
+    writeFileSync(file, JSON.stringify({ entries: [] }));
+    expect(loadHistory(file)).toEqual([]);
+  });
+
+  it("returns entries from valid history file", () => {
+    const file = join(tmpDir, "valid-history.json");
+    const entries = [{ removedAt: "2026-01-01T00:00:00.000Z", rule: { scope: "billing", severity: "info", description: "test", lastFile: "a.ts", lastLine: 1 } }];
+    writeFileSync(file, JSON.stringify(entries));
+    expect(loadHistory(file)).toEqual(entries);
+  });
+});
+
+describe("appendHistory", () => {
+  it("creates history file on first removal", () => {
+    const file = join(tmpDir, "new-history.json");
+    expect(existsSync(file)).toBe(false);
+
+    const removed = [makeRule({ description: "gone rule", fullScope: "billing.plans", severity: "critical", file: "plans.ts", line: 42 })];
+    const result = appendHistory(file, removed);
+
+    expect(existsSync(file)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].rule.description).toBe("gone rule");
+    expect(result[0].rule.scope).toBe("billing.plans");
+    expect(result[0].rule.severity).toBe("critical");
+    expect(result[0].rule.lastFile).toBe("plans.ts");
+    expect(result[0].rule.lastLine).toBe(42);
+    expect(result[0].removedAt).toBeTruthy();
+  });
+
+  it("appends to existing history", () => {
+    const file = join(tmpDir, "append-history.json");
+    const existing = [{ removedAt: "2026-01-01T00:00:00.000Z", rule: { scope: "auth", severity: "info", description: "old", lastFile: "a.ts", lastLine: 1 } }];
+    writeFileSync(file, JSON.stringify(existing));
+
+    const removed = [makeRule({ description: "new removal" })];
+    const result = appendHistory(file, removed);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].rule.description).toBe("old");
+    expect(result[1].rule.description).toBe("new removal");
+
+    // Verify file was written correctly
+    const onDisk = JSON.parse(readFileSync(file, "utf-8"));
+    expect(onDisk).toHaveLength(2);
   });
 });

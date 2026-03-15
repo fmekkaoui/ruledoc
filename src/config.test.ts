@@ -215,6 +215,16 @@ describe("parseCLI flags", () => {
     expect(resolveConfig(["--verbose"], dir).verbose).toBe(true);
   });
 
+  it("--no-history", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--no-history"], dir).history).toBe(false);
+  });
+
+  it("history defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).history).toBe(true);
+  });
+
   it("--format with no value does not set formats", () => {
     const dir = tmp();
     // --format at end of args with no following value

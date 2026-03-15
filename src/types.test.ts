@@ -33,6 +33,7 @@ describe("DEFAULT_CONFIG", () => {
       check: false,
       quiet: false,
       verbose: false,
+      history: true,
     });
   });
 });

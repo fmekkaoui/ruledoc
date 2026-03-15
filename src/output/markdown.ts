@@ -1,7 +1,7 @@
 import { buildTree, capitalize, sevBadge } from "../tree.js";
-import type { Rule, RuleWarning } from "../types.js";
+import type { HistoryEntry, Rule, RuleWarning } from "../types.js";
 
-export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], _srcDir: string): string {
+export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], _srcDir: string, history: HistoryEntry[] = []): string {
   const tree = buildTree(rules);
   const scopes = Object.keys(tree).sort();
   const l: string[] = [];
@@ -62,6 +62,19 @@ export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], _srcDir
         if (r.codeContext) l.push(`  <br>\`${r.codeContext}\``);
         l.push("");
       }
+    }
+    l.push("---", "");
+  }
+
+  // Removed Rules (history)
+  if (history.length > 0) {
+    l.push("## Removed Rules", "");
+    const recent = [...history].reverse().slice(0, 20);
+    for (const entry of recent) {
+      const date = entry.removedAt.split("T")[0];
+      l.push(`- ~~${entry.rule.description}~~ \`${entry.rule.scope}\` · \`${entry.rule.severity}\` — removed ${date}`);
+      l.push(`  <br>📍 \`${entry.rule.lastFile}:${entry.rule.lastLine}\``);
+      l.push("");
     }
     l.push("---", "");
   }

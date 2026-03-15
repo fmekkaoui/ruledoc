@@ -1,10 +1,10 @@
 export { ConfigError, resolveConfig } from "./config.js";
-export { computeDiff, loadPreviousRules } from "./diff.js";
+export { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
 export { generateHTML } from "./output/html.js";
 export { generateJSON } from "./output/json.js";
 export { generateMarkdown } from "./output/markdown.js";
 export type { ExtractionResult } from "./parser.js";
 export { extractRules } from "./parser.js";
 export { buildTree } from "./tree.js";
-export type { Rule, RuleDiff, RuledocConfig, RuleWarning, ScopeTree } from "./types.js";
+export type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleWarning, ScopeTree } from "./types.js";
 export { buildPattern, DEFAULT_CONFIG, DEFAULT_SEVERITIES } from "./types.js";

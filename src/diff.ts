@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import type { Rule, RuleDiff } from "./types.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import type { HistoryEntry, Rule, RuleDiff } from "./types.js";
 
 function fingerprint(r: Rule): string {
   return `${r.fullScope}|${r.severity}|${r.ticket}|${r.description}|${r.file}`;
@@ -22,4 +22,39 @@ export function computeDiff(prev: Rule[], next: Rule[]): RuleDiff {
     added: next.filter((r) => !prevSet.has(fingerprint(r))),
     removed: prev.filter((r) => !nextSet.has(fingerprint(r))),
   };
+}
+
+// ---------------------------------------------------------------------------
+// History (tombstones)
+// ---------------------------------------------------------------------------
+
+export function loadHistory(historyPath: string): HistoryEntry[] {
+  try {
+    if (!existsSync(historyPath)) return [];
+    const data = JSON.parse(readFileSync(historyPath, "utf-8"));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+export function appendHistory(historyPath: string, removed: Rule[]): HistoryEntry[] {
+  const history = loadHistory(historyPath);
+  const now = new Date().toISOString();
+
+  for (const r of removed) {
+    history.push({
+      removedAt: now,
+      rule: {
+        scope: r.fullScope,
+        severity: r.severity,
+        description: r.description,
+        lastFile: r.file,
+        lastLine: r.line,
+      },
+    });
+  }
+
+  writeFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);
+  return history;
 }
