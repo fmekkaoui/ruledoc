@@ -1,0 +1,5 @@
+{
+  "src": "./src",
+  "output": "./DOCS.md",
+  "formats": ["md", "json"]
+}

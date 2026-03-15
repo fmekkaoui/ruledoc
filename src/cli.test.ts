@@ -17,6 +17,8 @@ beforeEach(() => {
   warns = [];
   exitCode = undefined;
   originalCwd = process.cwd();
+  process.env.NO_COLOR = "1";
+  delete process.env.FORCE_COLOR;
 
   vi.spyOn(process, "exit").mockImplementation((code?: number | string | null | undefined) => {
     exitCode = (code ?? 0) as number;
@@ -36,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   process.chdir(originalCwd);
   rmSync(tmpDir, { recursive: true, force: true });
+  delete process.env.NO_COLOR;
   vi.restoreAllMocks();
 });
 
