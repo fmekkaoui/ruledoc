@@ -98,6 +98,15 @@ describe("resolveConfig", () => {
     expect(spy).toHaveBeenCalledWith(expect.stringContaining("ruledoc.config.ts"));
   });
 
+  it("collects config warnings into array when provided", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "ruledoc.config.ts"), "export default {}");
+    const warnings: string[] = [];
+    resolveConfig([], dir, warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("ruledoc.config.ts");
+  });
+
   it("warns on .js config file", () => {
     const dir = tmp();
     writeFileSync(join(dir, "ruledoc.config.js"), "module.exports = {}");

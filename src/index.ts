@@ -1,5 +1,5 @@
 export { ConfigError, resolveConfig } from "./config.js";
-export { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
+export { appendHistory, computeDiff, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
 export { generateContext } from "./output/context.js";
 export { generateHTML } from "./output/html.js";
 export { generateJSON } from "./output/json.js";
@@ -10,4 +10,10 @@ export type { ProtectionResult } from "./protect.js";
 export { checkProtection } from "./protect.js";
 export { buildTree } from "./tree.js";
 export type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleRemoval, RuleWarning, ScopeTree } from "./types.js";
-export { buildPattern, DEFAULT_CONFIG, DEFAULT_SEVERITIES } from "./types.js";
+export {
+  buildPattern,
+  DEFAULT_CONFIG,
+  DEFAULT_SEVERITIES,
+  DEFAULT_SEVERITY_DISPLAY,
+  SEVERITY_DISPLAY,
+} from "./types.js";

@@ -1,7 +1,7 @@
 import { buildTree, capitalize, sevBadge } from "../tree.js";
 import type { HistoryEntry, Rule, RuleWarning } from "../types.js";
 
-export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], _srcDir: string, history: HistoryEntry[] = []): string {
+export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], history: HistoryEntry[] = []): string {
   const tree = buildTree(rules);
   const scopes = Object.keys(tree).sort();
   const l: string[] = [];

@@ -8,6 +8,9 @@ inputs:
   allow-removal:
     description: Bypass protection checks
     default: "false"
+  json-output:
+    description: JSON output file path
+    default: "BUSINESS_RULES.json"
   token:
     description: GitHub token for PR comments
     default: ${{ github.token }}
@@ -19,8 +22,8 @@ runs:
     - name: Save previous JSON
       shell: bash
       run: |
-        if [ -f BUSINESS_RULES.json ]; then
-          cp BUSINESS_RULES.json /tmp/ruledoc-prev.json
+        if [ -f "${{ inputs.json-output }}" ]; then
+          cp "${{ inputs.json-output }}" /tmp/ruledoc-prev.json
         else
           echo '{"rules":[]}' > /tmp/ruledoc-prev.json
         fi
@@ -31,7 +34,7 @@ runs:
       shell: bash
       run: |
         set +e
-        args="--check --quiet --protect ${{ inputs.protect }}"
+        args="--check --quiet --protect '${{ inputs.protect }}'"
         if [ "${{ inputs.allow-removal }}" = "true" ]; then
           args="$args --allow-removal"
         fi
@@ -49,6 +52,8 @@ runs:
       id: diff
       shell: bash
       run: node ${{ github.action_path }}/diff-and-comment.mjs
+      env:
+        JSON_PATH: ${{ inputs.json-output }}
 
     # 5. Post or update PR comment
     - name: Post PR comment
@@ -105,4 +110,4 @@ runs:
     - name: Enforce check result
       if: steps.check.outputs.exit_code != '0'
       shell: bash
-      run: exit ${{ steps.check.outputs.exit_code }}
+      run: exit "${{ steps.check.outputs.exit_code }}"

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
 // Entries that are hidden on Windows but don't start with "."
@@ -30,6 +30,10 @@ export function walkFiles(
     }
 
     if (stat.isDirectory()) {
+      if (lstatSync(fullPath).isSymbolicLink()) {
+        onSkip?.(fullPath, "symlink");
+        continue;
+      }
       results.push(...walkFiles(fullPath, extensions, ignored, onSkip));
     } else if (extensions.has(extname(entry))) {
       results.push(fullPath);

@@ -90,4 +90,23 @@ describe("checkProtection", () => {
     expect(result.blocked).toEqual([]);
     expect(result.acknowledged).toEqual([]);
   });
+
+  it("matches subscope removal to rule with matching fullScope", () => {
+    const removed = [makeRule({ severity: "critical", fullScope: "billing.plans" })];
+    const removals = [makeRemoval({ scope: "billing.plans" })];
+    const result = checkProtection(removed, removals, ["critical"]);
+    expect(result.blocked).toEqual([]);
+    expect(result.acknowledged).toHaveLength(1);
+  });
+
+  it("uses first removal when duplicate @rule-removed for same scope", () => {
+    const removed = [makeRule({ severity: "critical", fullScope: "billing.plans" })];
+    const removals = [
+      makeRemoval({ scope: "billing.plans", ticket: "FIRST-1" }),
+      makeRemoval({ scope: "billing.plans", ticket: "SECOND-2" }),
+    ];
+    const result = checkProtection(removed, removals, ["critical"]);
+    expect(result.blocked).toEqual([]);
+    expect(result.acknowledged).toHaveLength(1);
+  });
 });

@@ -136,6 +136,13 @@ export interface RuledocConfig {
   };
 }
 
+export const SEVERITY_DISPLAY: Record<string, { emoji: string; color: string; label: string }> = {
+  critical: { emoji: "\uD83D\uDD34", color: "#ef4444", label: "Critical" },
+  warning: { emoji: "\uD83D\uDFE1", color: "#eab308", label: "Warning" },
+  info: { emoji: "\uD83D\uDD35", color: "#3b82f6", label: "Info" },
+};
+export const DEFAULT_SEVERITY_DISPLAY = { emoji: "\u26AA", color: "#9ca3af", label: "" };
+
 export const DEFAULT_SEVERITIES = ["info", "warning", "critical"];
 
 export const DEFAULT_CONFIG: RuledocConfig = {

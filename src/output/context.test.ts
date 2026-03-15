@@ -64,9 +64,7 @@ describe("generateContext", () => {
   });
 
   it("truncates to maxRules", () => {
-    const rules = Array.from({ length: 10 }, (_, i) =>
-      makeRule({ fullScope: `scope${i}`, description: `rule ${i}` }),
-    );
+    const rules = Array.from({ length: 10 }, (_, i) => makeRule({ fullScope: `scope${i}`, description: `rule ${i}` }));
     const config = makeConfig({ context: { maxRules: 3 } });
     const output = generateContext(rules, config);
     const ruleLines = output.split("\n").filter((l) => l.startsWith("["));

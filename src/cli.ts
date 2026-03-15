@@ -1,5 +1,15 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ConfigError, resolveConfig } from "./config.js";
+
+function deriveOutputPaths(mdPath: string) {
+  return {
+    json: mdPath.replace(/\.md$/, ".json"),
+    history: mdPath.replace(/\.md$/, "_HISTORY.json"),
+    html: mdPath.replace(/\.md$/, ".html"),
+    context: mdPath.replace(/\.md$/, ".context"),
+  };
+}
+
 import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
 import { generateContext } from "./output/context.js";
 import { generateHTML } from "./output/html.js";
@@ -204,8 +214,9 @@ function main() {
 
   // Resolve and validate config
   let config: RuledocConfig;
+  const configWarnings: string[] = [];
   try {
-    config = resolveConfig(args);
+    config = resolveConfig(args, process.cwd(), configWarnings);
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(`\n${c.red}✗ ${err.message}${c.reset}\n`);
@@ -215,6 +226,10 @@ function main() {
   }
 
   const log = createLogger(config.quiet);
+
+  for (const w of configWarnings) {
+    log.log(`${c.yellow}${w}${c.reset}`);
+  }
 
   if (!existsSync(config.src)) {
     log.error(`${c.red}✗ Source directory "${config.src}" not found${c.reset}`);
@@ -242,8 +257,8 @@ function main() {
   }
 
   // Diff
-  const jsonPath = config.output.replace(/\.md$/, ".json");
-  const prev = loadPreviousRules(jsonPath);
+  const paths = deriveOutputPaths(config.output);
+  const prev = loadPreviousRules(paths.json);
   const diff = computeDiff(prev, rules);
   const hasChanges = diff.added.length > 0 || diff.removed.length > 0;
 
@@ -252,14 +267,13 @@ function main() {
   }
 
   // History (tombstones for removed rules)
-  const historyPath = config.output.replace(/\.md$/, "_HISTORY.json");
   let history: HistoryEntry[] = [];
 
   if (config.history) {
     if (diff.removed.length > 0) {
-      history = appendHistory(historyPath, diff.removed, removals);
+      history = appendHistory(paths.history, diff.removed, removals);
     } else {
-      history = loadHistory(historyPath);
+      history = loadHistory(paths.history);
     }
   }
 
@@ -298,7 +312,7 @@ function main() {
   if (config.check) {
     if (existsSync(config.output)) {
       const existing = readFileSync(config.output, "utf-8");
-      const fresh = generateMarkdown(rules, warnings, config.src, history);
+      const fresh = generateMarkdown(rules, warnings, history);
       if (existing !== fresh) {
         log.error(`\n${c.red}✗ BUSINESS_RULES.md is stale. Run ruledoc to regenerate.${c.reset}`);
         process.exit(1);
@@ -312,25 +326,23 @@ function main() {
   const outputs: string[] = [];
 
   if (config.formats.includes("md")) {
-    writeFileSync(config.output, generateMarkdown(rules, warnings, config.src, history));
+    writeFileSync(config.output, generateMarkdown(rules, warnings, history));
     outputs.push(config.output);
   }
 
   if (config.formats.includes("json")) {
-    writeFileSync(jsonPath, generateJSON(rules, warnings));
-    outputs.push(jsonPath);
+    writeFileSync(paths.json, generateJSON(rules, warnings));
+    outputs.push(paths.json);
   }
 
   if (config.formats.includes("html")) {
-    const htmlPath = config.output.replace(/\.md$/, ".html");
-    writeFileSync(htmlPath, generateHTML(rules, warnings, config.src));
-    outputs.push(htmlPath);
+    writeFileSync(paths.html, generateHTML(rules, warnings));
+    outputs.push(paths.html);
   }
 
   if (config.formats.includes("context")) {
-    const contextPath = config.output.replace(/\.md$/, ".context");
-    writeFileSync(contextPath, generateContext(rules, config));
-    outputs.push(contextPath);
+    writeFileSync(paths.context, generateContext(rules, config));
+    outputs.push(paths.context);
   }
 
   for (const o of outputs) {

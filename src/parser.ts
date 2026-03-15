@@ -125,7 +125,12 @@ export function extractRules(config: RuledocConfig): ExtractionResult {
     let content: string;
     try {
       content = readFileSync(filePath, "utf-8");
-    } catch {
+    } catch (err) {
+      warnings.push({
+        file: relative(config.src, filePath),
+        line: 0,
+        message: `could not read file: ${err instanceof Error ? err.message : String(err)}`,
+      });
       continue;
     }
 

@@ -610,7 +610,18 @@ describe("cli", () => {
       errors = [];
 
       writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
-      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical", "--allow-removal"]);
+      await runCLI([
+        "--src",
+        srcDir,
+        "--output",
+        outMd,
+        "--format",
+        "md,json",
+        "--check",
+        "--protect",
+        "critical",
+        "--allow-removal",
+      ]);
       // Should not exit 2
       expect(exitCode).not.toBe(2);
     });

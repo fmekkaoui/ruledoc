@@ -15,7 +15,9 @@ export function checkProtection(
 
   const removalByScope = new Map<string, RuleRemoval>();
   for (const rem of removals) {
-    removalByScope.set(rem.scope, rem);
+    if (!removalByScope.has(rem.scope)) {
+      removalByScope.set(rem.scope, rem);
+    }
   }
 
   const blocked: Rule[] = [];

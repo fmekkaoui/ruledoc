@@ -1,19 +1,20 @@
 import { buildTree, capitalize } from "../tree.js";
 import type { Rule, RuleWarning } from "../types.js";
+import { DEFAULT_SEVERITY_DISPLAY, SEVERITY_DISPLAY } from "../types.js";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function sevColor(s: string): string {
-  return { critical: "#ef4444", warning: "#eab308", info: "#3b82f6" }[s] || "#9ca3af";
+  return SEVERITY_DISPLAY[s]?.color ?? DEFAULT_SEVERITY_DISPLAY.color;
 }
 
 function sevLabel(s: string): string {
-  return { critical: "Critical", warning: "Warning", info: "Info" }[s] || s;
+  return SEVERITY_DISPLAY[s]?.label || s;
 }
 
-export function generateHTML(rules: Rule[], warnings: RuleWarning[], _srcDir: string): string {
+export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
   const tree = buildTree(rules);
   const scopes = Object.keys(tree).sort();
   const totalCritical = rules.filter((r) => r.severity === "critical").length;

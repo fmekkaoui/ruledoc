@@ -112,7 +112,12 @@ describe("loadHistory", () => {
 
   it("returns entries from valid history file", () => {
     const file = join(tmpDir, "valid-history.json");
-    const entries = [{ removedAt: "2026-01-01T00:00:00.000Z", rule: { scope: "billing", severity: "info", description: "test", lastFile: "a.ts", lastLine: 1 } }];
+    const entries = [
+      {
+        removedAt: "2026-01-01T00:00:00.000Z",
+        rule: { scope: "billing", severity: "info", description: "test", lastFile: "a.ts", lastLine: 1 },
+      },
+    ];
     writeFileSync(file, JSON.stringify(entries));
     expect(loadHistory(file)).toEqual(entries);
   });
@@ -123,7 +128,15 @@ describe("appendHistory", () => {
     const file = join(tmpDir, "new-history.json");
     expect(existsSync(file)).toBe(false);
 
-    const removed = [makeRule({ description: "gone rule", fullScope: "billing.plans", severity: "critical", file: "plans.ts", line: 42 })];
+    const removed = [
+      makeRule({
+        description: "gone rule",
+        fullScope: "billing.plans",
+        severity: "critical",
+        file: "plans.ts",
+        line: 42,
+      }),
+    ];
     const result = appendHistory(file, removed);
 
     expect(existsSync(file)).toBe(true);
@@ -138,7 +151,15 @@ describe("appendHistory", () => {
 
   it("populates acknowledged field when removal matches", () => {
     const file = join(tmpDir, "ack-history.json");
-    const removed = [makeRule({ description: "ack rule", fullScope: "billing.plans", severity: "critical", file: "plans.ts", line: 42 })];
+    const removed = [
+      makeRule({
+        description: "ack rule",
+        fullScope: "billing.plans",
+        severity: "critical",
+        file: "plans.ts",
+        line: 42,
+      }),
+    ];
     const removals = [{ scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10 }];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
@@ -160,7 +181,12 @@ describe("appendHistory", () => {
 
   it("appends to existing history", () => {
     const file = join(tmpDir, "append-history.json");
-    const existing = [{ removedAt: "2026-01-01T00:00:00.000Z", rule: { scope: "auth", severity: "info", description: "old", lastFile: "a.ts", lastLine: 1 } }];
+    const existing = [
+      {
+        removedAt: "2026-01-01T00:00:00.000Z",
+        rule: { scope: "auth", severity: "info", description: "old", lastFile: "a.ts", lastLine: 1 },
+      },
+    ];
     writeFileSync(file, JSON.stringify(existing));
 
     const removed = [makeRule({ description: "new removal" })];

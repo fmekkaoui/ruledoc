@@ -1,21 +1,5 @@
 import { readFileSync, appendFileSync } from "node:fs";
-
-// ---------------------------------------------------------------------------
-// Fingerprint & diff (mirrors src/diff.ts)
-// ---------------------------------------------------------------------------
-
-function fingerprint(r) {
-  return `${r.fullScope}|${r.severity}|${r.ticket}|${r.description}|${r.file}`;
-}
-
-function computeDiff(prev, next) {
-  const prevSet = new Set(prev.map(fingerprint));
-  const nextSet = new Set(next.map(fingerprint));
-  return {
-    added: next.filter((r) => !prevSet.has(fingerprint(r))),
-    removed: prev.filter((r) => !nextSet.has(fingerprint(r))),
-  };
-}
+import { computeDiff } from "../dist/index.js";
 
 // ---------------------------------------------------------------------------
 // Read inputs
@@ -29,8 +13,10 @@ function loadRules(path) {
   }
 }
 
-const prev = loadRules("/tmp/ruledoc-prev.json");
-const next = loadRules("BUSINESS_RULES.json");
+const jsonPath = process.env.JSON_PATH || "BUSINESS_RULES.json";
+const prevPath = process.env.PREV_JSON_PATH || "/tmp/ruledoc-prev.json";
+const prev = loadRules(prevPath);
+const next = loadRules(jsonPath);
 const { added, removed } = computeDiff(prev, next);
 
 const outputFile = process.env.GITHUB_OUTPUT;

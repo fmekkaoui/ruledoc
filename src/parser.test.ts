@@ -294,10 +294,7 @@ describe("extractRules", () => {
 
   it("extracts @rule-removed with custom tag", () => {
     const dir = tmp();
-    writeFileSync(
-      join(dir, "test.ts"),
-      `// @brule-removed(billing, TICK-1): Gone\nconst x = 1;\n`,
-    );
+    writeFileSync(join(dir, "test.ts"), `// @brule-removed(billing, TICK-1): Gone\nconst x = 1;\n`);
     const result = extractRules(makeConfig(dir, { tag: "brule" }));
     expect(result.removals).toHaveLength(1);
     expect(result.removals[0].scope).toBe("billing");
@@ -315,6 +312,34 @@ describe("extractRules", () => {
     );
     const result = extractRules(makeConfig(dir));
     expect(result.removals).toHaveLength(2);
+  });
+
+  it("finds annotation on last line with no trailing newline", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): Last line`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Last line");
+    expect(result.rules[0].codeContext).toBe("");
+  });
+
+  it("normalizes severity case to lowercase", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, CRITICAL): Uppercase severity\nfunction pay() {}\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].severity).toBe("critical");
+  });
+
+  it("warns on unreadable files", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "good.ts"), `// @rule(ok): Works\ncode();\n`);
+    writeFileSync(join(dir, "unreadable.ts"), `// @rule(x): Y\nz();\n`, { mode: 0o000 });
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules.some((r) => r.scope === "ok")).toBe(true);
+    const readWarning = result.warnings.find((w) => w.message.includes("could not read file"));
+    expect(readWarning).toBeDefined();
+    expect(readWarning?.line).toBe(0);
   });
 
   it("skips code context lines that start with comment markers", () => {

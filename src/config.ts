@@ -18,7 +18,7 @@ export class ConfigError extends Error {
 // Load config from ruledoc.config.json or package.json
 // ---------------------------------------------------------------------------
 
-function loadConfigFile(cwd: string): Partial<RuledocConfig> | null {
+function loadConfigFile(cwd: string, warnings?: string[]): Partial<RuledocConfig> | null {
   // Only JSON — no eval, no code execution
   const jsonPath = join(cwd, "ruledoc.config.json");
   if (existsSync(jsonPath)) {
@@ -32,9 +32,12 @@ function loadConfigFile(cwd: string): Partial<RuledocConfig> | null {
   // Warn if user has a JS/TS config (unsupported)
   for (const name of ["ruledoc.config.ts", "ruledoc.config.js", "ruledoc.config.mjs"]) {
     if (existsSync(join(cwd, name))) {
-      console.warn(
-        `⚠ Found ${name} — only ruledoc.config.json is supported. Rename to .json or use the "ruledoc" field in package.json.`,
-      );
+      const msg = `⚠ Found ${name} — only ruledoc.config.json is supported. Rename to .json or use the "ruledoc" field in package.json.`;
+      if (warnings) {
+        warnings.push(msg);
+      } else {
+        console.warn(msg);
+      }
       break;
     }
   }
@@ -277,8 +280,8 @@ function validate(config: RuledocConfig): void {
 // Merge: defaults < config file < CLI flags → validate
 // ---------------------------------------------------------------------------
 
-export function resolveConfig(args: string[], cwd: string = process.cwd()): RuledocConfig {
-  const fileConfig = loadConfigFile(cwd) || {};
+export function resolveConfig(args: string[], cwd: string = process.cwd(), warnings?: string[]): RuledocConfig {
+  const fileConfig = loadConfigFile(cwd, warnings) || {};
   const cliConfig = parseCLI(args);
 
   const config: RuledocConfig = {

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { HistoryEntry, Rule, RuleDiff, RuleRemoval } from "./types.js";
 
-function fingerprint(r: Rule): string {
+export function fingerprint(r: Rule): string {
   return `${r.fullScope}|${r.severity}|${r.ticket}|${r.description}|${r.file}`;
 }
 
@@ -44,7 +44,9 @@ export function appendHistory(historyPath: string, removed: Rule[], removals: Ru
 
   const removalByScope = new Map<string, RuleRemoval>();
   for (const rem of removals) {
-    removalByScope.set(rem.scope, rem);
+    if (!removalByScope.has(rem.scope)) {
+      removalByScope.set(rem.scope, rem);
+    }
   }
 
   for (const r of removed) {
