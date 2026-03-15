@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ConfigError, resolveConfig } from "./config.js";
 import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
+import { generateContext } from "./output/context.js";
 import { generateHTML } from "./output/html.js";
 import { generateJSON } from "./output/json.js";
 import { generateMarkdown } from "./output/markdown.js";
@@ -58,7 +59,7 @@ ${c.bold}Usage:${c.reset}
 ${c.bold}Options:${c.reset}
   -s, --src <dir>           Source directory (default: ./src)
   -o, --output <file>       Output file (default: ./BUSINESS_RULES.md)
-  -f, --format <formats>    md,json,html (default: md,json)
+  -f, --format <formats>    md,json,html,context (default: md,json)
   -e, --extensions <exts>   .ts,.vue,.py (default: .ts,.tsx,.js,.jsx,.mjs,.cjs,.vue,.svelte)
       --ignore <dirs>       Directories to skip
   -t, --tag <name>          Annotation tag (default: rule → @rule(...))
@@ -324,6 +325,12 @@ function main() {
     const htmlPath = config.output.replace(/\.md$/, ".html");
     writeFileSync(htmlPath, generateHTML(rules, warnings, config.src));
     outputs.push(htmlPath);
+  }
+
+  if (config.formats.includes("context")) {
+    const contextPath = config.output.replace(/\.md$/, ".context");
+    writeFileSync(contextPath, generateContext(rules, config));
+    outputs.push(contextPath);
   }
 
   for (const o of outputs) {

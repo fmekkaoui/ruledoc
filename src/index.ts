@@ -1,5 +1,6 @@
 export { ConfigError, resolveConfig } from "./config.js";
 export { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
+export { generateContext } from "./output/context.js";
 export { generateHTML } from "./output/html.js";
 export { generateJSON } from "./output/json.js";
 export { generateMarkdown } from "./output/markdown.js";

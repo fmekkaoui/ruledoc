@@ -90,7 +90,7 @@ export interface RuledocConfig {
   output: string;
 
   /** Output formats to generate. Default: ["md", "json"] */
-  formats: ("md" | "json" | "html")[];
+  formats: ("md" | "json" | "html" | "context")[];
 
   /** File extensions to scan. */
   extensions: string[];
@@ -128,6 +128,12 @@ export interface RuledocConfig {
 
   /** Track removed rules in BUSINESS_RULES_HISTORY.json. */
   history: boolean;
+
+  /** Context format options. */
+  context?: {
+    maxRules?: number;
+    severities?: string[];
+  };
 }
 
 export const DEFAULT_SEVERITIES = ["info", "warning", "critical"];

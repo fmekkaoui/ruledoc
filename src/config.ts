@@ -159,7 +159,7 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
 // Validation
 // ---------------------------------------------------------------------------
 
-const VALID_FORMATS = new Set(["md", "json", "html"]);
+const VALID_FORMATS = new Set(["md", "json", "html", "context"]);
 
 function validate(config: RuledocConfig): void {
   const errors: string[] = [];
@@ -182,7 +182,7 @@ function validate(config: RuledocConfig): void {
   } else {
     for (const f of config.formats) {
       if (!VALID_FORMATS.has(f)) {
-        errors.push(`unknown format "${f}" — valid formats: md, json, html`);
+        errors.push(`unknown format "${f}" — valid formats: ${[...VALID_FORMATS].join(", ")}`);
       }
     }
   }
@@ -235,12 +235,30 @@ function validate(config: RuledocConfig): void {
     }
   }
 
+  // protect + context severity checks share the same set
+  const sevSet = new Set(config.severities);
+
   // protect
   if (config.protect.length > 0) {
-    const sevSet = new Set(config.severities);
     for (const p of config.protect) {
       if (!sevSet.has(p)) {
         errors.push(`unknown protected severity "${p}" — valid severities: ${config.severities.join(", ")}`);
+      }
+    }
+  }
+
+  // context options
+  if (config.context) {
+    if (config.context.maxRules !== undefined) {
+      if (!Number.isInteger(config.context.maxRules) || config.context.maxRules <= 0) {
+        errors.push("context.maxRules must be a positive integer");
+      }
+    }
+    if (config.context.severities) {
+      for (const s of config.context.severities) {
+        if (!sevSet.has(s)) {
+          errors.push(`unknown context severity "${s}" — valid severities: ${config.severities.join(", ")}`);
+        }
       }
     }
   }
@@ -278,6 +296,7 @@ export function resolveConfig(args: string[], cwd: string = process.cwd()): Rule
     quiet: cliConfig.quiet ?? fileConfig.quiet ?? DEFAULT_CONFIG.quiet,
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,
     history: cliConfig.history ?? fileConfig.history ?? DEFAULT_CONFIG.history,
+    context: cliConfig.context ?? fileConfig.context,
   };
 
   validate(config);
