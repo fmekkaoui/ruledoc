@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
-import type { Rule, RuledocConfig, RuleWarning } from "./types.js";
+import type { Rule, RuledocConfig, RuleRemoval, RuleWarning } from "./types.js";
 import { buildPattern } from "./types.js";
 import { walkFiles } from "./walker.js";
 
@@ -98,6 +98,7 @@ function parseParams(raw: string, severities: string[], defaultSeverity: string)
 export interface ExtractionResult {
   rules: Rule[];
   warnings: RuleWarning[];
+  removals: RuleRemoval[];
 }
 
 export function extractRules(config: RuledocConfig): ExtractionResult {
@@ -113,6 +114,12 @@ export function extractRules(config: RuledocConfig): ExtractionResult {
   const defaultSeverity = severities[0] || "info";
   const rules: Rule[] = [];
   const warnings: RuleWarning[] = [];
+  const removals: RuleRemoval[] = [];
+  const escapedTag = config.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const removalRegex = new RegExp(
+    String.raw`@${escapedTag}-removed\(([^,)]+),\s*([^)]+)\)\s*:?\s*(.+?)(?:\s*\*\/)?$`,
+    "i",
+  );
 
   for (const filePath of files) {
     let content: string;
@@ -126,6 +133,18 @@ export function extractRules(config: RuledocConfig): ExtractionResult {
     const lines = content.split("\n");
 
     for (let i = 0; i < lines.length; i++) {
+      // Check for @rule-removed annotation
+      const removalMatch = removalRegex.exec(lines[i]);
+      if (removalMatch) {
+        removals.push({
+          scope: removalMatch[1].trim(),
+          ticket: removalMatch[2].trim(),
+          reason: removalMatch[3].trim(),
+          file: relFile,
+          line: i + 1,
+        });
+      }
+
       regex.lastIndex = 0;
       const match = regex.exec(lines[i]);
       if (!match) continue;
@@ -179,5 +198,5 @@ export function extractRules(config: RuledocConfig): ExtractionResult {
     }
   }
 
-  return { rules, warnings };
+  return { rules, warnings, removals };
 }

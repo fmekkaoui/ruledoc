@@ -225,6 +225,31 @@ describe("parseCLI flags", () => {
     expect(resolveConfig([], dir).history).toBe(true);
   });
 
+  it("--protect critical", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--protect", "critical"], dir).protect).toEqual(["critical"]);
+  });
+
+  it("--protect critical,warning", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--protect", "critical,warning"], dir).protect).toEqual(["critical", "warning"]);
+  });
+
+  it("--allow-removal", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--allow-removal"], dir).allowRemoval).toBe(true);
+  });
+
+  it("protect defaults to empty array", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).protect).toEqual([]);
+  });
+
+  it("allowRemoval defaults to false", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).allowRemoval).toBe(false);
+  });
+
   it("--format with no value does not set formats", () => {
     const dir = tmp();
     // --format at end of args with no following value
@@ -373,6 +398,24 @@ describe("validation", () => {
     configFile(dir, { pattern: "[invalid(" });
     expect(() => resolveConfig([], dir)).toThrow(ConfigError);
     expect(() => resolveConfig([], dir)).toThrow(/pattern is not a valid regex/);
+  });
+
+  it("unknown protected severity throws", () => {
+    const dir = tmp();
+    expect(() => resolveConfig(["--protect", "nonexistent"], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig(["--protect", "nonexistent"], dir)).toThrow(/unknown protected severity/);
+  });
+
+  it("valid protected severity passes", () => {
+    const dir = tmp();
+    expect(() => resolveConfig(["--protect", "critical"], dir)).not.toThrow();
+  });
+
+  it("protect from config file", () => {
+    const dir = tmp();
+    configFile(dir, { protect: ["critical"] });
+    const config = resolveConfig([], dir);
+    expect(config.protect).toEqual(["critical"]);
   });
 
   it("quiet + verbose together throws", () => {

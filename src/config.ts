@@ -131,6 +131,16 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
         config.history = false;
         break;
 
+      case "--protect": {
+        const val = args[++i];
+        if (val) config.protect = val.split(",").map((s) => s.trim());
+        break;
+      }
+
+      case "--allow-removal":
+        config.allowRemoval = true;
+        break;
+
       default:
         if (!arg.startsWith("-")) {
           if (!config.src) config.src = arg;
@@ -225,6 +235,16 @@ function validate(config: RuledocConfig): void {
     }
   }
 
+  // protect
+  if (config.protect.length > 0) {
+    const sevSet = new Set(config.severities);
+    for (const p of config.protect) {
+      if (!sevSet.has(p)) {
+        errors.push(`unknown protected severity "${p}" — valid severities: ${config.severities.join(", ")}`);
+      }
+    }
+  }
+
   // quiet + verbose conflict
   if (config.quiet && config.verbose) {
     errors.push("--quiet and --verbose cannot be used together");
@@ -252,6 +272,8 @@ export function resolveConfig(args: string[], cwd: string = process.cwd()): Rule
     tag: cliConfig.tag ?? fileConfig.tag ?? DEFAULT_CONFIG.tag,
     severities: cliConfig.severities ?? fileConfig.severities ?? DEFAULT_CONFIG.severities,
     pattern: cliConfig.pattern ?? fileConfig.pattern ?? DEFAULT_CONFIG.pattern,
+    protect: cliConfig.protect ?? fileConfig.protect ?? DEFAULT_CONFIG.protect,
+    allowRemoval: cliConfig.allowRemoval ?? fileConfig.allowRemoval ?? DEFAULT_CONFIG.allowRemoval,
     check: cliConfig.check ?? fileConfig.check ?? DEFAULT_CONFIG.check,
     quiet: cliConfig.quiet ?? fileConfig.quiet ?? DEFAULT_CONFIG.quiet,
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,

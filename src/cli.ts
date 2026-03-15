@@ -5,6 +5,7 @@ import { generateHTML } from "./output/html.js";
 import { generateJSON } from "./output/json.js";
 import { generateMarkdown } from "./output/markdown.js";
 import { extractRules } from "./parser.js";
+import { checkProtection } from "./protect.js";
 import { capitalize } from "./tree.js";
 import type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
 
@@ -64,6 +65,8 @@ ${c.bold}Options:${c.reset}
       --severities <list>   Severity levels, first is default (default: info,warning,critical)
   -p, --pattern <regex>     Custom regex (overrides --tag)
   -c, --check               CI mode: exit 1 if docs are stale
+      --protect <severities>  Block removal of rules at these severity levels (comma-separated)
+      --allow-removal       Bypass all protection checks
   -q, --quiet               Suppress all output except errors
       --no-history          Don't track removed rules in history file
       --verbose             List every rule found
@@ -218,7 +221,7 @@ function main() {
   }
 
   // Extract
-  const { rules, warnings } = extractRules(config);
+  const { rules, warnings, removals } = extractRules(config);
 
   // Stats
   const scopes = new Set(rules.map((r) => r.scope));
@@ -253,9 +256,37 @@ function main() {
 
   if (config.history) {
     if (diff.removed.length > 0) {
-      history = appendHistory(historyPath, diff.removed);
+      history = appendHistory(historyPath, diff.removed, removals);
     } else {
       history = loadHistory(historyPath);
+    }
+  }
+
+  // Protection check
+  if (config.protect.length > 0 && !config.allowRemoval && diff.removed.length > 0) {
+    const protection = checkProtection(diff.removed, removals, config.protect);
+
+    for (const r of protection.acknowledged) {
+      log.log(`  ${c.green}✓${c.reset} [${r.severity}] ${r.fullScope}: acknowledged via @${config.tag}-removed`);
+    }
+
+    if (protection.blocked.length > 0) {
+      for (const r of protection.blocked) {
+        log.error(`  ${c.red}✗${c.reset} [${r.severity}] ${r.fullScope}: ${r.description}`);
+        log.error(`    was in ${r.file}`);
+      }
+
+      if (config.check) {
+        log.error(
+          `\n${c.red}✗ ruledoc: ${protection.blocked.length} critical rule(s) removed — build blocked${c.reset}`,
+        );
+        log.error(`  To allow removal, use --allow-removal or add a @${config.tag}-removed() comment.`);
+        process.exit(2);
+      } else {
+        log.log(
+          `\n${c.yellow}⚠ ruledoc: ${protection.blocked.length} protected rule(s) removed (use --check to enforce)${c.reset}`,
+        );
+      }
     }
   }
 

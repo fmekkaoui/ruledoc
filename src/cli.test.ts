@@ -557,6 +557,88 @@ describe("cli", () => {
     });
   });
 
+  describe("--protect", () => {
+    it("exits 2 with --check --protect critical when critical rule removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with critical rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Remove the critical rule
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical"]);
+      expect(exitCode).toBe(2);
+      expect(errors.join("\n")).toContain("build blocked");
+    });
+
+    it("warns without --check when protected rule removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--protect", "critical"]);
+      // Should not exit 2 without --check
+      expect(exitCode).toBeUndefined();
+      expect(logs.join("\n")).toContain("protected rule(s) removed");
+    });
+
+    it("--allow-removal bypasses protection", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical", "--allow-removal"]);
+      // Should not exit 2
+      expect(exitCode).not.toBe(2);
+    });
+
+    it("@rule-removed acknowledgment unblocks protected removal", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Remove rule but add @rule-removed acknowledgment
+      writeFileSync(
+        join(srcDir, "billing.ts"),
+        "// @rule-removed(billing.plans, JIRA-456): Migrated to config service\nconst x = 1;\n",
+      );
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical"]);
+      // Should not exit 2 — acknowledged
+      expect(exitCode).not.toBe(2);
+      expect(logs.join("\n")).toContain("acknowledged");
+    });
+  });
+
   describe("no diff printed when no previous rules exist", () => {
     it("does not print diff on first run", async () => {
       const srcDir = join(tmpDir, "src");

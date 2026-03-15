@@ -74,6 +74,9 @@ export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], _srcDir
       const date = entry.removedAt.split("T")[0];
       l.push(`- ~~${entry.rule.description}~~ \`${entry.rule.scope}\` · \`${entry.rule.severity}\` — removed ${date}`);
       l.push(`  <br>📍 \`${entry.rule.lastFile}:${entry.rule.lastLine}\``);
+      if (entry.acknowledged) {
+        l.push(`  <br>✅ Acknowledged: \`${entry.acknowledged.ticket}\` — ${entry.acknowledged.reason}`);
+      }
       l.push("");
     }
     l.push("---", "");

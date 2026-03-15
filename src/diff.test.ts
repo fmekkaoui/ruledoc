@@ -136,6 +136,28 @@ describe("appendHistory", () => {
     expect(result[0].removedAt).toBeTruthy();
   });
 
+  it("populates acknowledged field when removal matches", () => {
+    const file = join(tmpDir, "ack-history.json");
+    const removed = [makeRule({ description: "ack rule", fullScope: "billing.plans", severity: "critical", file: "plans.ts", line: 42 })];
+    const removals = [{ scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10 }];
+    const result = appendHistory(file, removed, removals);
+    expect(result).toHaveLength(1);
+    expect(result[0].acknowledged).toEqual({
+      ticket: "JIRA-456",
+      reason: "Migrated",
+      file: "plans.ts",
+      line: 10,
+    });
+  });
+
+  it("does not set acknowledged when no removal matches", () => {
+    const file = join(tmpDir, "no-ack-history.json");
+    const removed = [makeRule({ description: "no ack", fullScope: "auth.session" })];
+    const result = appendHistory(file, removed);
+    expect(result).toHaveLength(1);
+    expect(result[0].acknowledged).toBeUndefined();
+  });
+
   it("appends to existing history", () => {
     const file = join(tmpDir, "append-history.json");
     const existing = [{ removedAt: "2026-01-01T00:00:00.000Z", rule: { scope: "auth", severity: "info", description: "old", lastFile: "a.ts", lastLine: 1 } }];

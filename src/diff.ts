@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import type { HistoryEntry, Rule, RuleDiff } from "./types.js";
+import type { HistoryEntry, Rule, RuleDiff, RuleRemoval } from "./types.js";
 
 function fingerprint(r: Rule): string {
   return `${r.fullScope}|${r.severity}|${r.ticket}|${r.description}|${r.file}`;
@@ -38,12 +38,17 @@ export function loadHistory(historyPath: string): HistoryEntry[] {
   }
 }
 
-export function appendHistory(historyPath: string, removed: Rule[]): HistoryEntry[] {
+export function appendHistory(historyPath: string, removed: Rule[], removals: RuleRemoval[] = []): HistoryEntry[] {
   const history = loadHistory(historyPath);
   const now = new Date().toISOString();
 
+  const removalByScope = new Map<string, RuleRemoval>();
+  for (const rem of removals) {
+    removalByScope.set(rem.scope, rem);
+  }
+
   for (const r of removed) {
-    history.push({
+    const entry: HistoryEntry = {
       removedAt: now,
       rule: {
         scope: r.fullScope,
@@ -52,7 +57,19 @@ export function appendHistory(historyPath: string, removed: Rule[]): HistoryEntr
         lastFile: r.file,
         lastLine: r.line,
       },
-    });
+    };
+
+    const ack = removalByScope.get(r.fullScope);
+    if (ack) {
+      entry.acknowledged = {
+        ticket: ack.ticket,
+        reason: ack.reason,
+        file: ack.file,
+        line: ack.line,
+      };
+    }
+
+    history.push(entry);
   }
 
   writeFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);

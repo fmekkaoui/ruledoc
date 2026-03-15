@@ -259,6 +259,64 @@ describe("extractRules", () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it("returns empty removals by default", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): A rule\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toEqual([]);
+  });
+
+  it("extracts @rule-removed annotation from // comment", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(billing.plans, JIRA-456): Migrated to config service\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("billing.plans");
+    expect(result.removals[0].ticket).toBe("JIRA-456");
+    expect(result.removals[0].reason).toBe("Migrated to config service");
+  });
+
+  it("extracts @rule-removed from block comment", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `/** @rule-removed(auth.session, AUTH-99): No longer needed */\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("auth.session");
+    expect(result.removals[0].ticket).toBe("AUTH-99");
+    expect(result.removals[0].reason).toBe("No longer needed");
+  });
+
+  it("extracts @rule-removed with custom tag", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @brule-removed(billing, TICK-1): Gone\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir, { tag: "brule" }));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("billing");
+  });
+
+  it("extracts multiple removals from same file", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule-removed(billing.plans, JIRA-1): Reason 1",
+        "// @rule-removed(auth.session, JIRA-2): Reason 2",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(2);
+  });
+
   it("skips code context lines that start with comment markers", () => {
     const dir = tmp();
     writeFileSync(

@@ -53,6 +53,19 @@ export interface HistoryEntry {
     lastFile: string;
     lastLine: number;
   };
+  acknowledged?: { ticket: string; reason: string; file: string; line: number };
+}
+
+// ---------------------------------------------------------------------------
+// Rule removal acknowledgment
+// ---------------------------------------------------------------------------
+
+export interface RuleRemoval {
+  scope: string;
+  ticket: string;
+  reason: string;
+  file: string;
+  line: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +111,12 @@ export interface RuledocConfig {
    */
   pattern: string | null;
 
+  /** Severity levels to protect from silent removal. */
+  protect: string[];
+
+  /** Bypass all protection checks. */
+  allowRemoval: boolean;
+
   /** CI mode — exit 1 if generated doc differs from existing. */
   check: boolean;
 
@@ -134,6 +153,8 @@ export const DEFAULT_CONFIG: RuledocConfig = {
   tag: "rule",
   severities: DEFAULT_SEVERITIES,
   pattern: null,
+  protect: [],
+  allowRemoval: false,
   check: false,
   quiet: false,
   verbose: false,
