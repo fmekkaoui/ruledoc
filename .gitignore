@@ -10,6 +10,9 @@ BUSINESS_RULES.html
 # Drafts
 docs/
 
+# License cache
+.ruledoc-license.json
+
 # OS
 .DS_Store
 Thumbs.db

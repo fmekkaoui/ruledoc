@@ -134,6 +134,9 @@ export interface RuledocConfig {
     maxRules?: number;
     severities?: string[];
   };
+
+  /** Polar.sh license key for Pro features. */
+  license?: string;
 }
 
 export const SEVERITY_DISPLAY: Record<string, { emoji: string; color: string; label: string }> = {

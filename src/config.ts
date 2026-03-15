@@ -300,6 +300,7 @@ export function resolveConfig(args: string[], cwd: string = process.cwd(), warni
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,
     history: cliConfig.history ?? fileConfig.history ?? DEFAULT_CONFIG.history,
     context: cliConfig.context ?? fileConfig.context,
+    license: fileConfig.license,
   };
 
   validate(config);

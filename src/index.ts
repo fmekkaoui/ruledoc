@@ -1,5 +1,8 @@
 export { ConfigError, resolveConfig } from "./config.js";
 export { appendHistory, computeDiff, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
+export type { ProFeature } from "./gate.js";
+export { printProGate, requirePro } from "./gate.js";
+export { isProEnabled } from "./license.js";
 export { generateContext } from "./output/context.js";
 export { generateHTML } from "./output/html.js";
 export { generateJSON } from "./output/json.js";

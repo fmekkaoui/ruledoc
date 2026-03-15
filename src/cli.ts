@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ConfigError, resolveConfig } from "./config.js";
+import { printProGate } from "./gate.js";
+import { isProEnabled } from "./license.js";
 
 function deriveOutputPaths(mdPath: string) {
   return {
@@ -127,7 +129,7 @@ function runInit() {
   }
 
   console.log(
-    `${c.green}✓${c.reset} Add ${c.bold}BUSINESS_RULES.md${c.reset} and ${c.bold}BUSINESS_RULES.json${c.reset} to your .gitignore\n`,
+    `${c.green}✓${c.reset} Add ${c.bold}BUSINESS_RULES.md${c.reset}, ${c.bold}BUSINESS_RULES.json${c.reset}, and ${c.bold}.ruledoc-license.json${c.reset} to your .gitignore\n`,
   );
 }
 
@@ -195,7 +197,7 @@ function printVerbose(log: ReturnType<typeof createLogger>, rules: Rule[]) {
 // Main
 // ---------------------------------------------------------------------------
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   // Handle flags that don't need config
@@ -251,6 +253,9 @@ function main() {
       `${warning ? ` · ${c.yellow}${warning} warning${c.reset}` : ""}`,
   );
 
+  // Pro license check (computed once, reused across all gates)
+  const pro = await isProEnabled(rules.length, config);
+
   // Verbose: list all rules
   if (config.verbose) {
     printVerbose(log, rules);
@@ -269,7 +274,7 @@ function main() {
   // History (tombstones for removed rules)
   let history: HistoryEntry[] = [];
 
-  if (config.history) {
+  if (config.history && (pro || printProGate("tombstones", rules.length, config.quiet))) {
     if (diff.removed.length > 0) {
       history = appendHistory(paths.history, diff.removed, removals);
     } else {
@@ -278,7 +283,7 @@ function main() {
   }
 
   // Protection check
-  if (config.protect.length > 0 && !config.allowRemoval && diff.removed.length > 0) {
+  if (config.protect.length > 0 && !config.allowRemoval && diff.removed.length > 0 && (pro || printProGate("protect", rules.length, config.quiet))) {
     const protection = checkProtection(diff.removed, removals, config.protect);
 
     for (const r of protection.acknowledged) {
@@ -340,7 +345,7 @@ function main() {
     outputs.push(paths.html);
   }
 
-  if (config.formats.includes("context")) {
+  if (config.formats.includes("context") && (pro || printProGate("context", rules.length, config.quiet))) {
     writeFileSync(paths.context, generateContext(rules, config));
     outputs.push(paths.context);
   }
@@ -350,4 +355,4 @@ function main() {
   }
 }
 
-main();
+await main();
