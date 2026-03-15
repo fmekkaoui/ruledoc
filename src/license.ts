@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWriteFileSync } from "./atomic-write.js";
 import type { RuledocConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,7 @@ function readCache(cacheDir: string): LicenseCache | null {
 
 function writeCache(cacheDir: string, cache: LicenseCache): void {
   try {
-    writeFileSync(join(cacheDir, CACHE_FILE), `${JSON.stringify(cache, null, 2)}\n`);
+    atomicWriteFileSync(join(cacheDir, CACHE_FILE), `${JSON.stringify(cache, null, 2)}\n`);
   } catch {
     // Best-effort — don't crash if we can't write cache
   }
@@ -68,6 +69,7 @@ async function validateWithAPI(key: string): Promise<boolean | null> {
     });
     if (!res.ok) return null;
     const body = await res.json();
+    if (typeof body !== "object" || body === null || typeof body.status !== "string") return null;
     return body.status === "granted";
   } catch {
     return null; // Network failure
@@ -84,11 +86,7 @@ async function validateWithAPI(key: string): Promise<boolean | null> {
 // @rule(licensing.priority): Env var RULEDOC_LICENSE takes precedence over config
 // @rule(licensing.offline): No network + no cache → Pro disabled, CLI continues
 
-export async function isProEnabled(
-  ruleCount: number,
-  config: RuledocConfig,
-  cacheDir?: string,
-): Promise<boolean> {
+export async function isProEnabled(ruleCount: number, config: RuledocConfig, cacheDir?: string): Promise<boolean> {
   try {
     // Free tier: all features unlocked
     if (ruleCount < FREE_TIER_RULE_LIMIT) return true;

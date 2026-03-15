@@ -291,6 +291,12 @@ describe("parseCLI flags", () => {
     expect(config.output).toBe("./OUT.md");
   });
 
+  it("--protect with no value does not set protect", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--protect"], dir);
+    expect(config.protect).toEqual([]);
+  });
+
   it("--extra-ignore", () => {
     const dir = tmp();
     const config = resolveConfig(["--extra-ignore", "**/generated/**,**/vendor/**"], dir);
@@ -512,5 +518,38 @@ describe("validation", () => {
     configFile(dir, { pattern: "(@\\w+)\\s+(.+)" });
     const config = resolveConfig([], dir);
     expect(config.pattern).toBe("(@\\w+)\\s+(.+)");
+  });
+
+  it("pattern with nested quantifiers (ReDoS) throws", () => {
+    const dir = tmp();
+    configFile(dir, { pattern: "(a+)+" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/nested quantifiers/);
+  });
+
+  it("context.maxRules must be a positive integer", () => {
+    const dir = tmp();
+    configFile(dir, { context: { maxRules: -1 } });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/context.maxRules must be a positive integer/);
+  });
+
+  it("context.maxRules accepts valid positive integer", () => {
+    const dir = tmp();
+    configFile(dir, { context: { maxRules: 10 } });
+    expect(() => resolveConfig([], dir)).not.toThrow();
+  });
+
+  it("context.severities with unknown severity throws", () => {
+    const dir = tmp();
+    configFile(dir, { context: { severities: ["nonexistent"] } });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/unknown context severity/);
+  });
+
+  it("context.severities with valid severity passes", () => {
+    const dir = tmp();
+    configFile(dir, { context: { severities: ["critical"] } });
+    expect(() => resolveConfig([], dir)).not.toThrow();
   });
 });

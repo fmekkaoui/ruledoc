@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { atomicWriteFileSync } from "./atomic-write.js";
 import type { HistoryEntry, Rule, RuleDiff, RuleRemoval } from "./types.js";
 
 export function fingerprint(r: Rule): string {
@@ -74,6 +75,6 @@ export function appendHistory(historyPath: string, removed: Rule[], removals: Ru
     history.push(entry);
   }
 
-  writeFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);
+  atomicWriteFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);
   return history;
 }

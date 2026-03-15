@@ -179,6 +179,19 @@ describe("appendHistory", () => {
     expect(result[0].acknowledged).toBeUndefined();
   });
 
+  it("uses first removal when multiple removals share the same scope", () => {
+    const file = join(tmpDir, "dup-scope-history.json");
+    const removed = [makeRule({ description: "dup test", fullScope: "billing.plans" })];
+    const removals = [
+      { scope: "billing.plans", ticket: "JIRA-1", reason: "First", file: "a.ts", line: 1 },
+      { scope: "billing.plans", ticket: "JIRA-2", reason: "Second", file: "b.ts", line: 2 },
+    ];
+    const result = appendHistory(file, removed, removals);
+    expect(result).toHaveLength(1);
+    expect(result[0].acknowledged?.ticket).toBe("JIRA-1");
+    expect(result[0].acknowledged?.reason).toBe("First");
+  });
+
   it("appends to existing history", () => {
     const file = join(tmpDir, "append-history.json");
     const existing = [

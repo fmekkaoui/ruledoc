@@ -51,9 +51,9 @@ describe("isProEnabled", () => {
   it("env var takes precedence over config", async () => {
     const dir = tmp();
     process.env.RULEDOC_LICENSE = "env-key";
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "granted" }), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ status: "granted" }), { status: 200 }));
 
     await isProEnabled(50, makeConfig({ license: "config-key" }), dir);
 
@@ -64,9 +64,9 @@ describe("isProEnabled", () => {
 
   it("uses config license when no env var", async () => {
     const dir = tmp();
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "granted" }), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ status: "granted" }), { status: 200 }));
 
     await isProEnabled(50, makeConfig({ license: "config-key" }), dir);
 
@@ -89,9 +89,9 @@ describe("isProEnabled", () => {
     const dir = tmp();
     const oldDate = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     writeCache(dir, { key: "my-key", valid: true, checkedAt: oldDate });
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "granted" }), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ status: "granted" }), { status: 200 }));
 
     const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
 
@@ -201,13 +201,20 @@ describe("isProEnabled", () => {
     expect(result).toBe(false);
   });
 
+  it("API returning non-200 status without cache returns false", async () => {
+    const dir = tmp();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("error", { status: 500 }));
+
+    const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
+
+    expect(result).toBe(false);
+  });
+
   it("API returning non-200 status uses grace period", async () => {
     const dir = tmp();
     const recentDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
     writeCache(dir, { key: "my-key", valid: true, checkedAt: recentDate });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("error", { status: 500 }),
-    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("error", { status: 500 }));
 
     const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
 
@@ -217,9 +224,9 @@ describe("isProEnabled", () => {
   it("cache with valid JSON but missing fields is ignored", async () => {
     const dir = tmp();
     writeFileSync(join(dir, ".ruledoc-license.json"), JSON.stringify({ key: "my-key" }));
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "granted" }), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ status: "granted" }), { status: 200 }));
 
     const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
 
@@ -227,12 +234,39 @@ describe("isProEnabled", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("API returning non-object body returns false (type guard)", async () => {
+    const dir = tmp();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify("just a string"), { status: 200 }));
+
+    const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
+
+    expect(result).toBe(false);
+  });
+
+  it("API returning null body returns false (type guard)", async () => {
+    const dir = tmp();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(null), { status: 200 }));
+
+    const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
+
+    expect(result).toBe(false);
+  });
+
+  it("API returning body without status field returns false (type guard)", async () => {
+    const dir = tmp();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ foo: "bar" }), { status: 200 }));
+
+    const result = await isProEnabled(50, makeConfig({ license: "my-key" }), dir);
+
+    expect(result).toBe(false);
+  });
+
   it("cache with different key is ignored", async () => {
     const dir = tmp();
     writeCache(dir, { key: "old-key", valid: true, checkedAt: new Date().toISOString() });
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "granted" }), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ status: "granted" }), { status: 200 }));
 
     await isProEnabled(50, makeConfig({ license: "new-key" }), dir);
 

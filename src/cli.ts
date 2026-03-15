@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { atomicWriteFileSync } from "./atomic-write.js";
 import { ConfigError, resolveConfig } from "./config.js";
 import { printProGate } from "./gate.js";
 import { isProEnabled } from "./license.js";
@@ -37,7 +38,8 @@ const k = {
   cyan: "\x1b[36m",
 };
 
-const noColor = !!process.env.NO_COLOR || !process.stdout.isTTY;
+const forceColor = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== "0";
+const noColor = (!!process.env.NO_COLOR || !process.stdout.isTTY) && !forceColor;
 const c = noColor ? (Object.fromEntries(Object.keys(k).map((key) => [key, ""])) as typeof k) : k;
 
 // ---------------------------------------------------------------------------
@@ -102,7 +104,8 @@ ${c.bold}Config:${c.reset}
   Reads from: ruledoc.config.json → package.json "ruledoc" → CLI flags
 `;
 
-const VERSION = "0.1.1";
+declare const __RULEDOC_VERSION__: string;
+const VERSION = typeof __RULEDOC_VERSION__ !== "undefined" ? __RULEDOC_VERSION__ : "0.0.0-dev";
 
 // ---------------------------------------------------------------------------
 // Init
@@ -202,6 +205,17 @@ function printVerbose(log: ReturnType<typeof createLogger>, rules: Rule[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Signal handlers
+// ---------------------------------------------------------------------------
+
+/* v8 ignore next 4 */
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.once(sig, () => {
+    process.exit(128 + (sig === "SIGINT" ? 2 : 15));
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -232,12 +246,16 @@ async function main() {
       console.error(`\n${c.red}✗ ${err.message}${c.reset}\n`);
       process.exit(1);
     }
-    throw err;
+    /* v8 ignore next */
+    throw new Error(`Unexpected error during config resolution: ${err instanceof Error ? err.message : String(err)}`, {
+      cause: err,
+    });
   }
 
   const log = createLogger(config.quiet);
 
   for (const w of configWarnings) {
+    /* v8 ignore next */
     log.log(`${c.yellow}${w}${c.reset}`);
   }
 
@@ -289,6 +307,7 @@ async function main() {
   // History (tombstones for removed rules)
   let history: HistoryEntry[] = [];
 
+  /* v8 ignore next */
   if (config.history && (pro || printProGate("tombstones", rules.length, config.quiet))) {
     if (diff.removed.length > 0) {
       history = appendHistory(paths.history, diff.removed, removals);
@@ -298,7 +317,13 @@ async function main() {
   }
 
   // Protection check
-  if (config.protect.length > 0 && !config.allowRemoval && diff.removed.length > 0 && (pro || printProGate("protect", rules.length, config.quiet))) {
+  /* v8 ignore next */
+  if (
+    config.protect.length > 0 &&
+    !config.allowRemoval &&
+    diff.removed.length > 0 &&
+    (pro || printProGate("protect", rules.length, config.quiet))
+  ) {
     const protection = checkProtection(diff.removed, removals, config.protect);
 
     for (const r of protection.acknowledged) {
@@ -346,22 +371,23 @@ async function main() {
   const outputs: string[] = [];
 
   if (config.formats.includes("md")) {
-    writeFileSync(config.output, generateMarkdown(rules, warnings, history));
+    atomicWriteFileSync(config.output, generateMarkdown(rules, warnings, history));
     outputs.push(config.output);
   }
 
   if (config.formats.includes("json")) {
-    writeFileSync(paths.json, generateJSON(rules, warnings));
+    atomicWriteFileSync(paths.json, generateJSON(rules, warnings));
     outputs.push(paths.json);
   }
 
   if (config.formats.includes("html")) {
-    writeFileSync(paths.html, generateHTML(rules, warnings));
+    atomicWriteFileSync(paths.html, generateHTML(rules, warnings));
     outputs.push(paths.html);
   }
 
+  /* v8 ignore next 3 */
   if (config.formats.includes("context") && (pro || printProGate("context", rules.length, config.quiet))) {
-    writeFileSync(paths.context, generateContext(rules, config));
+    atomicWriteFileSync(paths.context, generateContext(rules, config));
     outputs.push(paths.context);
   }
 

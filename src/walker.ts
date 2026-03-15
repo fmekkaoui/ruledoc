@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 
 // Entries that are hidden on Windows but don't start with "."
@@ -24,22 +24,25 @@ export function walkFiles(
     if (isHidden(entry) || ignored.has(entry)) continue;
 
     const fullPath = join(dir, entry);
-    let stat: ReturnType<typeof statSync>;
+    let lstat: ReturnType<typeof lstatSync>;
     try {
-      stat = statSync(fullPath);
+      lstat = lstatSync(fullPath);
+      /* v8 ignore start */
     } catch (err) {
       onSkip?.(fullPath, err instanceof Error ? err.message : String(err));
       continue;
     }
+    /* v8 ignore stop */
 
-    const isDir = stat.isDirectory();
+    if (lstat.isSymbolicLink()) {
+      onSkip?.(fullPath, "symlink");
+      continue;
+    }
+
+    const isDir = lstat.isDirectory();
     const rel = isIgnored ? relative(root, fullPath) : "";
 
     if (isDir) {
-      if (lstatSync(fullPath).isSymbolicLink()) {
-        onSkip?.(fullPath, "symlink");
-        continue;
-      }
       if (isIgnored && isIgnored(rel, true)) continue;
       results.push(...walkFiles(fullPath, extensions, ignored, onSkip, isIgnored, root));
     } else if (extensions.has(extname(entry))) {

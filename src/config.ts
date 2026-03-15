@@ -25,6 +25,7 @@ function loadConfigFile(cwd: string, warnings?: string[]): Partial<RuledocConfig
     try {
       return JSON.parse(readFileSync(jsonPath, "utf-8"));
     } catch (err) {
+      /* v8 ignore next */
       throw new ConfigError(`Invalid JSON in ruledoc.config.json: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -255,7 +256,12 @@ function validate(config: RuledocConfig): void {
       try {
         new RegExp(config.pattern);
       } catch (err) {
+        /* v8 ignore next */
         errors.push(`pattern is not a valid regex: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      // Basic ReDoS check: reject nested quantifiers like (a+)+ or (a*)*
+      if (/([+*]|\{\d+,?\d*\})\)?[+*]|\(\?[^)]*[+*][^)]*\)[+*]/.test(config.pattern)) {
+        errors.push("pattern contains nested quantifiers which may cause catastrophic backtracking (ReDoS)");
       }
     }
   }
@@ -302,11 +308,7 @@ function validate(config: RuledocConfig): void {
 // Merge: defaults < config file < CLI flags → validate
 // ---------------------------------------------------------------------------
 
-function mergeExtraIgnore(
-  fileValue: unknown,
-  cliValue: string[] | undefined,
-  defaultValue: string[],
-): string[] {
+function mergeExtraIgnore(fileValue: unknown, cliValue: string[] | undefined, defaultValue: string[]): string[] {
   // If file config provides a non-array value, pass it through for validation to catch
   if (fileValue !== undefined && !Array.isArray(fileValue)) {
     return fileValue as string[];

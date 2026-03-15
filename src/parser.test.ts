@@ -373,6 +373,15 @@ describe("extractRules", () => {
     expect(result.rules[0].description).toBe("Keep");
   });
 
+  it("skips isIgnored when gitignore, ignoreTests, and extraIgnore are all off", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ntest();\n`);
+    const result = extractRules(makeConfig(dir, { gitignore: false, ignoreTests: false, extraIgnore: [] }));
+    // Both files should be included (no filtering)
+    expect(result.rules).toHaveLength(2);
+  });
+
   it("normalizes severity case to lowercase", () => {
     const dir = tmp();
     writeFileSync(join(dir, "test.ts"), `// @rule(billing, CRITICAL): Uppercase severity\nfunction pay() {}\n`);
@@ -390,6 +399,18 @@ describe("extractRules", () => {
     const readWarning = result.warnings.find((w) => w.message.includes("could not read file"));
     expect(readWarning).toBeDefined();
     expect(readWarning?.line).toBe(0);
+  });
+
+  it("warns and skips files exceeding 10 MB", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "big.ts"), "x".repeat(11 * 1024 * 1024));
+    writeFileSync(join(dir, "ok.ts"), `// @rule(billing): Small file\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Small file");
+    const sizeWarning = result.warnings.find((w) => w.message.includes("exceeds 10 MB"));
+    expect(sizeWarning).toBeDefined();
+    expect(sizeWarning?.file).toBe("big.ts");
   });
 
   it("skips code context lines that start with comment markers", () => {

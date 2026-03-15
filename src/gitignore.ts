@@ -24,7 +24,7 @@ export function loadGitignore(rootDir: string): (relativePath: string) => boolea
 
   const rules: GitignoreRule[] = [];
 
-  for (const rawLine of content.split("\n")) {
+  for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
 
     // Skip blank lines and comments

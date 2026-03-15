@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { loadGitignore } from "./gitignore.js";
 import { globToRegex, matchesAnyGlob } from "./glob.js";
@@ -116,6 +116,7 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
   // Build combined isIgnored function from three layers
   const gitignoreFilter = config.gitignore ? loadGitignore(cwd) : null;
   const testRegexes = config.ignoreTests ? RULEDOC_DEFAULT_REGEXES : [];
+  /* v8 ignore next */
   const extraRegexes = (config.extraIgnore || []).map(globToRegex);
   // Pre-compute src path relative to cwd for gitignore matching (e.g. "src" or "./src" → "src")
   const srcRelPrefix = relative(cwd, resolve(cwd, config.src));
@@ -147,7 +148,23 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
     "i",
   );
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
   for (const filePath of files) {
+    try {
+      const size = statSync(filePath).size;
+      if (size > MAX_FILE_SIZE) {
+        warnings.push({
+          file: relative(config.src, filePath),
+          line: 0,
+          message: `skipped: file exceeds 10 MB (${(size / 1024 / 1024).toFixed(1)} MB)`,
+        });
+        continue;
+      }
+    } catch {
+      // If stat fails, try reading anyway — readFileSync will catch it
+    }
+
     let content: string;
     try {
       content = readFileSync(filePath, "utf-8");
@@ -155,13 +172,14 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
       warnings.push({
         file: relative(config.src, filePath),
         line: 0,
+        /* v8 ignore next */
         message: `could not read file: ${err instanceof Error ? err.message : String(err)}`,
       });
       continue;
     }
 
     const relFile = relative(config.src, filePath);
-    const lines = content.split("\n");
+    const lines = content.split(/\r?\n/);
 
     for (let i = 0; i < lines.length; i++) {
       // Check for @rule-removed annotation

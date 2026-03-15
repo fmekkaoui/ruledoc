@@ -71,13 +71,13 @@ describe("cli", () => {
     it("prints version and exits 0", async () => {
       await runCLI(["--version"]);
       expect(exitCode).toBe(0);
-      expect(logs.join("\n")).toContain("0.1.1");
+      expect(logs.join("\n")).toMatch(/\d+\.\d+\.\d+/);
     });
 
     it("prints version with -v flag", async () => {
       await runCLI(["-v"]);
       expect(exitCode).toBe(0);
-      expect(logs.join("\n")).toContain("0.1.1");
+      expect(logs.join("\n")).toMatch(/\d+\.\d+\.\d+/);
     });
   });
 
@@ -390,6 +390,39 @@ describe("cli", () => {
     });
   });
 
+  describe("verbose with ignore source details", () => {
+    it("shows gitignore disabled and extra patterns in verbose", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): A rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      await runCLI([
+        "--src",
+        srcDir,
+        "--output",
+        join(tmpDir, "out.md"),
+        "--verbose",
+        "--no-gitignore",
+        "--no-ignore-tests",
+        "--extra-ignore",
+        "**/gen/**,**/vendor/**",
+      ]);
+      const output = logs.join("\n");
+      expect(output).toContain("2 extra pattern");
+    });
+
+    it("shows singular extra pattern count", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): A rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      await runCLI(["--src", srcDir, "--output", join(tmpDir, "out.md"), "--verbose", "--extra-ignore", "**/gen/**"]);
+      const output = logs.join("\n");
+      expect(output).toContain("1 extra pattern");
+      expect(output).not.toContain("patterns");
+    });
+  });
+
   describe("verbose with non-info severity", () => {
     it("shows severity tag in verbose for non-info rules", async () => {
       const srcDir = join(tmpDir, "src");
@@ -482,9 +515,10 @@ describe("cli", () => {
         thrownError = e;
       }
 
-      // Should re-throw the TypeError, not catch it as ConfigError
-      expect(thrownError).toBeInstanceOf(TypeError);
-      expect((thrownError as TypeError).message).toBe("unexpected error");
+      // Should re-throw wrapped error with cause
+      expect(thrownError).toBeInstanceOf(Error);
+      expect((thrownError as Error).message).toContain("unexpected error");
+      expect((thrownError as Error).cause).toBeInstanceOf(TypeError);
 
       // Clean up mock so it doesn't leak to subsequent tests
       vi.doUnmock("./config.js");
