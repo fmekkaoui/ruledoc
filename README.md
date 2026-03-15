@@ -260,6 +260,39 @@ ruledoc --check --quiet
 - run: npx ruledoc --check --quiet
 ```
 
+## GitHub Action
+
+Use the built-in composite action to automate rule checking and PR comments:
+
+```yaml
+# .github/workflows/rules.yml
+name: Rules
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ruledoc:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: fmekkaoui/ruledoc/action@main
+        with:
+          protect: critical    # default: critical
+          allow-removal: 'false' # default: false
+```
+
+The action will:
+- Run `ruledoc --check` to verify docs are up to date
+- Post a PR comment summarizing added/removed rules
+- Fail the check if protected rules are removed without acknowledgment
+
 ## Interactive diff
 
 Each run compares with the previous JSON output and shows what changed:

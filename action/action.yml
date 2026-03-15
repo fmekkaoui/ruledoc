@@ -1,0 +1,108 @@
+name: ruledoc
+description: Check business rule documentation and post PR summaries
+
+inputs:
+  protect:
+    description: Severity levels to protect from removal (comma-separated)
+    default: "critical"
+  allow-removal:
+    description: Bypass protection checks
+    default: "false"
+  token:
+    description: GitHub token for PR comments
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    # 1. Save previously committed JSON for diffing
+    - name: Save previous JSON
+      shell: bash
+      run: |
+        if [ -f BUSINESS_RULES.json ]; then
+          cp BUSINESS_RULES.json /tmp/ruledoc-prev.json
+        else
+          echo '{"rules":[]}' > /tmp/ruledoc-prev.json
+        fi
+
+    # 2. Run ruledoc --check (capture exit code without failing)
+    - name: Run ruledoc --check
+      id: check
+      shell: bash
+      run: |
+        set +e
+        args="--check --quiet --protect ${{ inputs.protect }}"
+        if [ "${{ inputs.allow-removal }}" = "true" ]; then
+          args="$args --allow-removal"
+        fi
+        npx ruledoc $args
+        code=$?
+        echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+    # 3. Regenerate JSON for diffing (--check doesn't write files)
+    - name: Regenerate JSON
+      shell: bash
+      run: npx ruledoc --quiet --format json
+
+    # 4. Compute diff and format comment
+    - name: Compute diff
+      id: diff
+      shell: bash
+      run: node ${{ github.action_path }}/diff-and-comment.mjs
+
+    # 5. Post or update PR comment
+    - name: Post PR comment
+      if: steps.diff.outputs.has_changes == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const marker = '<!-- ruledoc-comment -->';
+          const body = marker + '\n' + process.env.COMMENT_BODY;
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner, repo, issue_number,
+          });
+          const existing = comments.find(c => c.body?.includes(marker));
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner, repo, comment_id: existing.id, body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body,
+            });
+          }
+      env:
+        COMMENT_BODY: ${{ steps.diff.outputs.comment_body }}
+
+    # 6. Delete stale comment when no changes
+    - name: Delete stale comment
+      if: steps.diff.outputs.has_changes == 'false' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const marker = '<!-- ruledoc-comment -->';
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner, repo, issue_number,
+          });
+          const existing = comments.find(c => c.body?.includes(marker));
+
+          if (existing) {
+            await github.rest.issues.deleteComment({
+              owner, repo, comment_id: existing.id,
+            });
+          }
+
+    # 7. Enforce check result
+    - name: Enforce check result
+      if: steps.check.outputs.exit_code != '0'
+      shell: bash
+      run: exit ${{ steps.check.outputs.exit_code }}
