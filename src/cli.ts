@@ -74,6 +74,9 @@ ${c.bold}Options:${c.reset}
   -f, --format <formats>    md,json,html,context (default: md,json)
   -e, --extensions <exts>   .ts,.vue,.py (default: .ts,.tsx,.js,.jsx,.mjs,.cjs,.vue,.svelte)
       --ignore <dirs>       Directories to skip
+      --extra-ignore <globs>  Additional glob patterns to exclude (comma-separated)
+      --no-ignore-tests     Include test files (*.test.*, *.spec.*, __tests__)
+      --no-gitignore        Don't respect .gitignore patterns
   -t, --tag <name>          Annotation tag (default: rule → @rule(...))
       --severities <list>   Severity levels, first is default (default: info,warning,critical)
   -p, --pattern <regex>     Custom regex (overrides --tag)
@@ -121,10 +124,15 @@ function runInit() {
   console.log(`\nThen run ${c.bold}ruledoc${c.reset} to generate documentation.\n`);
 
   if (!existsSync("ruledoc.config.json")) {
-    writeFileSync(
-      "ruledoc.config.json",
-      `${JSON.stringify({ src: "./src", output: "./BUSINESS_RULES.md", formats: ["md", "json"] }, null, 2)}\n`,
-    );
+    const initConfig = {
+      src: "./src",
+      output: "./BUSINESS_RULES.md",
+      formats: ["md", "json"],
+      // extraIgnore: ["**/generated/**"],
+      // ignoreTests: true,
+      // gitignore: true,
+    };
+    writeFileSync("ruledoc.config.json", `${JSON.stringify(initConfig, null, 2)}\n`);
     console.log(`${c.green}✓${c.reset} Created ruledoc.config.json`);
   }
 
@@ -239,7 +247,7 @@ async function main() {
   }
 
   // Extract
-  const { rules, warnings, removals } = extractRules(config);
+  const { rules, warnings, removals } = extractRules(config, process.cwd());
 
   // Stats
   const scopes = new Set(rules.map((r) => r.scope));
@@ -256,8 +264,15 @@ async function main() {
   // Pro license check (computed once, reused across all gates)
   const pro = await isProEnabled(rules.length, config);
 
-  // Verbose: list all rules
+  // Verbose: list all rules and show ignore sources
   if (config.verbose) {
+    const gitignoreStatus = config.gitignore ? "✓" : "✗";
+    const testStatus = config.ignoreTests ? "✓" : "✗";
+    const extraCount = config.extraIgnore.length;
+    const extraPart = extraCount > 0 ? ` · ${extraCount} extra pattern${extraCount > 1 ? "s" : ""}` : "";
+    log.log(
+      `${c.cyan}◆ ruledoc:${c.reset} ignore sources: .gitignore ${gitignoreStatus} · test files ${testStatus}${extraPart}`,
+    );
     printVerbose(log, rules);
   }
 

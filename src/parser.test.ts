@@ -323,6 +323,56 @@ describe("extractRules", () => {
     expect(result.rules[0].codeContext).toBe("");
   });
 
+  it("excludes test files by default (ignoreTests: true)", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Real rule\nfunction pay() {}\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ndescribe('', () => {});\n`);
+    writeFileSync(join(dir, "app.spec.ts"), `// @rule(billing): Spec rule\ndescribe('', () => {});\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Real rule");
+  });
+
+  it("includes test files when ignoreTests is false", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Real rule\nfunction pay() {}\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ndescribe('', () => {});\n`);
+    const result = extractRules(makeConfig(dir, { ignoreTests: false }));
+    expect(result.rules).toHaveLength(2);
+  });
+
+  it("respects .gitignore when gitignore is true", () => {
+    const dir = tmp();
+    const srcDir = join(dir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(srcDir, "generated.ts"), `// @rule(billing): Skip\nconst y = 2;\n`);
+    writeFileSync(join(dir, ".gitignore"), "src/generated.ts\n");
+    const result = extractRules(makeConfig(srcDir, { ignoreTests: false }), dir);
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Keep");
+  });
+
+  it("ignores .gitignore when gitignore is false", () => {
+    const dir = tmp();
+    const srcDir = join(dir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(srcDir, "generated.ts"), `// @rule(billing): Also keep\nconst y = 2;\n`);
+    writeFileSync(join(dir, ".gitignore"), "src/generated.ts\n");
+    const result = extractRules(makeConfig(srcDir, { ignoreTests: false, gitignore: false }), dir);
+    expect(result.rules).toHaveLength(2);
+  });
+
+  it("extraIgnore excludes matching files", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(dir, "generated.ts"), `// @rule(billing): Skip\nconst y = 2;\n`);
+    const result = extractRules(makeConfig(dir, { ignoreTests: false, extraIgnore: ["**/generated.*"] }));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Keep");
+  });
+
   it("normalizes severity case to lowercase", () => {
     const dir = tmp();
     writeFileSync(join(dir, "test.ts"), `// @rule(billing, CRITICAL): Uppercase severity\nfunction pay() {}\n`);

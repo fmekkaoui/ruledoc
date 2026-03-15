@@ -1,4 +1,6 @@
 export { ConfigError, resolveConfig } from "./config.js";
+export { loadGitignore } from "./gitignore.js";
+export { globToRegex, matchesAnyGlob } from "./glob.js";
 export { appendHistory, computeDiff, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
 export type { ProFeature } from "./gate.js";
 export { printProGate, requirePro } from "./gate.js";
@@ -18,5 +20,6 @@ export {
   DEFAULT_CONFIG,
   DEFAULT_SEVERITIES,
   DEFAULT_SEVERITY_DISPLAY,
+  RULEDOC_DEFAULT_IGNORE,
   SEVERITY_DISPLAY,
 } from "./types.js";

@@ -144,6 +144,23 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
         config.allowRemoval = true;
         break;
 
+      case "--extra-ignore": {
+        const val = args[++i];
+        if (val) {
+          const patterns = val.split(",").map((s) => s.trim());
+          config.extraIgnore = [...(config.extraIgnore || []), ...patterns];
+        }
+        break;
+      }
+
+      case "--no-ignore-tests":
+        config.ignoreTests = false;
+        break;
+
+      case "--no-gitignore":
+        config.gitignore = false;
+        break;
+
       default:
         if (!arg.startsWith("-")) {
           if (!config.src) config.src = arg;
@@ -204,6 +221,11 @@ function validate(config: RuledocConfig): void {
   // ignore
   if (!Array.isArray(config.ignore)) {
     errors.push("ignore must be an array of directory names");
+  }
+
+  // extraIgnore
+  if (!Array.isArray(config.extraIgnore)) {
+    errors.push("extraIgnore must be an array of glob patterns");
   }
 
   // tag
@@ -280,6 +302,19 @@ function validate(config: RuledocConfig): void {
 // Merge: defaults < config file < CLI flags → validate
 // ---------------------------------------------------------------------------
 
+function mergeExtraIgnore(
+  fileValue: unknown,
+  cliValue: string[] | undefined,
+  defaultValue: string[],
+): string[] {
+  // If file config provides a non-array value, pass it through for validation to catch
+  if (fileValue !== undefined && !Array.isArray(fileValue)) {
+    return fileValue as string[];
+  }
+  const base = (fileValue as string[] | undefined) ?? defaultValue;
+  return [...base, ...(cliValue ?? [])];
+}
+
 export function resolveConfig(args: string[], cwd: string = process.cwd(), warnings?: string[]): RuledocConfig {
   const fileConfig = loadConfigFile(cwd, warnings) || {};
   const cliConfig = parseCLI(args);
@@ -299,6 +334,9 @@ export function resolveConfig(args: string[], cwd: string = process.cwd(), warni
     quiet: cliConfig.quiet ?? fileConfig.quiet ?? DEFAULT_CONFIG.quiet,
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,
     history: cliConfig.history ?? fileConfig.history ?? DEFAULT_CONFIG.history,
+    extraIgnore: mergeExtraIgnore(fileConfig.extraIgnore, cliConfig.extraIgnore, DEFAULT_CONFIG.extraIgnore),
+    ignoreTests: cliConfig.ignoreTests ?? fileConfig.ignoreTests ?? DEFAULT_CONFIG.ignoreTests,
+    gitignore: cliConfig.gitignore ?? fileConfig.gitignore ?? DEFAULT_CONFIG.gitignore,
     context: cliConfig.context ?? fileConfig.context,
     license: fileConfig.license,
   };

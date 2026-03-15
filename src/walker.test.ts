@@ -109,6 +109,41 @@ describe("walkFiles", () => {
     expect(result).toEqual([join(dir, "real.ts")]);
   });
 
+  it("uses isIgnored callback to skip files", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), "");
+    writeFileSync(join(dir, "app.test.ts"), "");
+    const isIgnored = (rel: string) => rel.includes(".test.");
+    const result = walkFiles(dir, new Set([".ts"]), new Set(), undefined, isIgnored);
+    expect(result).toEqual([join(dir, "app.ts")]);
+  });
+
+  it("uses isIgnored callback to skip directories", () => {
+    const dir = tmp();
+    const sub = join(dir, "generated");
+    mkdirSync(sub);
+    writeFileSync(join(sub, "code.ts"), "");
+    writeFileSync(join(dir, "app.ts"), "");
+    const isIgnored = (rel: string, isDir: boolean) => isDir && rel === "generated";
+    const result = walkFiles(dir, new Set([".ts"]), new Set(), undefined, isIgnored);
+    expect(result).toEqual([join(dir, "app.ts")]);
+  });
+
+  it("isIgnored receives paths relative to root dir", () => {
+    const dir = tmp();
+    const sub = join(dir, "lib");
+    mkdirSync(sub);
+    writeFileSync(join(sub, "deep.ts"), "");
+    const paths: string[] = [];
+    const isIgnored = (rel: string) => {
+      paths.push(rel);
+      return false;
+    };
+    walkFiles(dir, new Set([".ts"]), new Set(), undefined, isIgnored);
+    expect(paths).toContain("lib");
+    expect(paths).toContain(join("lib", "deep.ts"));
+  });
+
   it("works without onSkip parameter (undefined)", () => {
     const dir = tmp();
     // Create a dangling symlink – should not throw even without onSkip

@@ -135,9 +135,30 @@ export interface RuledocConfig {
     severities?: string[];
   };
 
+  /** Additional glob patterns to ignore (appended, never replaces). */
+  extraIgnore: string[];
+
+  /** Exclude test files by default. Default: true */
+  ignoreTests: boolean;
+
+  /** Respect .gitignore patterns. Default: true */
+  gitignore: boolean;
+
   /** Polar.sh license key for Pro features. */
   license?: string;
 }
+
+export const RULEDOC_DEFAULT_IGNORE = [
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "**/*.test.js",
+  "**/*.test.jsx",
+  "**/*.spec.ts",
+  "**/*.spec.tsx",
+  "**/*.spec.js",
+  "**/*.spec.jsx",
+  "**/__tests__/**",
+];
 
 export const SEVERITY_DISPLAY: Record<string, { emoji: string; color: string; label: string }> = {
   critical: { emoji: "\uD83D\uDD34", color: "#ef4444", label: "Critical" },
@@ -175,6 +196,9 @@ export const DEFAULT_CONFIG: RuledocConfig = {
   quiet: false,
   verbose: false,
   history: true,
+  extraIgnore: [],
+  ignoreTests: true,
+  gitignore: true,
 };
 
 // ---------------------------------------------------------------------------

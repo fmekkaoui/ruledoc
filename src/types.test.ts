@@ -36,6 +36,9 @@ describe("DEFAULT_CONFIG", () => {
       quiet: false,
       verbose: false,
       history: true,
+      extraIgnore: [],
+      ignoreTests: true,
+      gitignore: true,
     });
   });
 });

@@ -290,6 +290,52 @@ describe("parseCLI flags", () => {
     expect(config.src).toBe("./mysrc");
     expect(config.output).toBe("./OUT.md");
   });
+
+  it("--extra-ignore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--extra-ignore", "**/generated/**,**/vendor/**"], dir);
+    expect(config.extraIgnore).toEqual(["**/generated/**", "**/vendor/**"]);
+  });
+
+  it("--extra-ignore appends to file config", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "ruledoc.config.json"), JSON.stringify({ extraIgnore: ["**/old/**"] }));
+    const config = resolveConfig(["--extra-ignore", "**/new/**"], dir);
+    expect(config.extraIgnore).toEqual(["**/old/**", "**/new/**"]);
+  });
+
+  it("--extra-ignore with no value does not set extraIgnore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--extra-ignore"], dir);
+    expect(config.extraIgnore).toEqual(DEFAULT_CONFIG.extraIgnore);
+  });
+
+  it("--no-ignore-tests", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--no-ignore-tests"], dir);
+    expect(config.ignoreTests).toBe(false);
+  });
+
+  it("ignoreTests defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).ignoreTests).toBe(true);
+  });
+
+  it("--no-gitignore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--no-gitignore"], dir);
+    expect(config.gitignore).toBe(false);
+  });
+
+  it("gitignore defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).gitignore).toBe(true);
+  });
+
+  it("extraIgnore defaults to empty array", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).extraIgnore).toEqual([]);
+  });
 });
 
 describe("validation", () => {
@@ -365,6 +411,13 @@ describe("validation", () => {
     configFile(dir, { ignore: "node_modules" });
     expect(() => resolveConfig([], dir)).toThrow(ConfigError);
     expect(() => resolveConfig([], dir)).toThrow(/ignore must be an array/);
+  });
+
+  it("extraIgnore not array throws", () => {
+    const dir = tmp();
+    configFile(dir, { extraIgnore: "bad" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/extraIgnore must be an array/);
   });
 
   it("empty tag throws", () => {

@@ -1,8 +1,13 @@
 import { readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { join, relative, resolve } from "node:path";
+import { loadGitignore } from "./gitignore.js";
+import { globToRegex, matchesAnyGlob } from "./glob.js";
 import type { Rule, RuledocConfig, RuleRemoval, RuleWarning } from "./types.js";
-import { buildPattern } from "./types.js";
+import { buildPattern, RULEDOC_DEFAULT_IGNORE } from "./types.js";
 import { walkFiles } from "./walker.js";
+
+// Pre-compiled regexes for default test file patterns (avoids re-compilation per call)
+const RULEDOC_DEFAULT_REGEXES = RULEDOC_DEFAULT_IGNORE.map(globToRegex);
 
 // ---------------------------------------------------------------------------
 // Levenshtein distance for "did you mean?" suggestions
@@ -101,13 +106,34 @@ export interface ExtractionResult {
   removals: RuleRemoval[];
 }
 
-export function extractRules(config: RuledocConfig): ExtractionResult {
+export function extractRules(config: RuledocConfig, cwd: string = process.cwd()): ExtractionResult {
   const extensions = new Set(config.extensions);
   const ignored = new Set(config.ignore);
   const onSkip = config.verbose
     ? (path: string, reason: string) => console.warn(`skipped ${path}: ${reason}`)
     : undefined;
-  const files = walkFiles(config.src, extensions, ignored, onSkip);
+
+  // Build combined isIgnored function from three layers
+  const gitignoreFilter = config.gitignore ? loadGitignore(cwd) : null;
+  const testRegexes = config.ignoreTests ? RULEDOC_DEFAULT_REGEXES : [];
+  const extraRegexes = (config.extraIgnore || []).map(globToRegex);
+  // Pre-compute src path relative to cwd for gitignore matching (e.g. "src" or "./src" → "src")
+  const srcRelPrefix = relative(cwd, resolve(cwd, config.src));
+
+  const isIgnored =
+    gitignoreFilter || testRegexes.length > 0 || extraRegexes.length > 0
+      ? (relativePath: string, _isDirectory: boolean): boolean => {
+          if (gitignoreFilter) {
+            const relToCwd = join(srcRelPrefix, relativePath);
+            if (gitignoreFilter(relToCwd)) return true;
+          }
+          if (testRegexes.length > 0 && matchesAnyGlob(relativePath, testRegexes)) return true;
+          if (extraRegexes.length > 0 && matchesAnyGlob(relativePath, extraRegexes)) return true;
+          return false;
+        }
+      : undefined;
+
+  const files = walkFiles(config.src, extensions, ignored, onSkip, isIgnored);
   const pattern = config.pattern || buildPattern(config.tag);
   const regex = new RegExp(pattern, "gim");
   const severities = config.severities;

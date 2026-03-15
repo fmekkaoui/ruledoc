@@ -226,6 +226,36 @@ Or in `package.json`:
   • pattern is not a valid regex: Unterminated character class
 ```
 
+## Ignore & Exclude
+
+ruledoc uses a three-layer ignore system to keep noise out of your docs:
+
+**Layer 1 — `.gitignore`** (on by default): Automatically respects your project's `.gitignore` patterns so generated files, build output, and vendor code are never scanned.
+
+**Layer 2 — Test file exclusion** (on by default): Skips `*.test.*`, `*.spec.*`, and `__tests__/**` files since test annotations are usually not real business rules.
+
+**Layer 3 — Extra patterns**: Add custom glob patterns to exclude additional files.
+
+### Config
+
+```json
+{
+  "extraIgnore": ["**/generated/**", "**/vendor/**"],
+  "ignoreTests": true,
+  "gitignore": true
+}
+```
+
+### CLI flags
+
+```bash
+ruledoc --extra-ignore "**/generated/**,**/vendor/**"
+ruledoc --no-ignore-tests    # include test files
+ruledoc --no-gitignore       # don't respect .gitignore
+```
+
+The `--extra-ignore` flag appends to any patterns set in the config file (it never replaces them). The existing `--ignore` flag for directory names continues to work as before.
+
 ## Custom tag
 
 Use a different annotation name:
