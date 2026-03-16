@@ -21,7 +21,7 @@ describe("printProGate", () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0][0]).toContain('"tombstones"');
     expect(warnSpy.mock.calls[0][0]).toContain("75 rules detected");
-    expect(warnSpy.mock.calls[0][0]).toContain("polar.sh/ruledoc");
+    expect(warnSpy.mock.calls[0][0]).toContain("buy.polar.sh/");
   });
 
   it("suppresses warning in quiet mode", () => {
