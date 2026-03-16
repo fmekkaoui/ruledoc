@@ -21,7 +21,7 @@ export function printProGate(feature: ProFeature, ruleCount: number, quiet: bool
   if (!quiet) {
     console.warn(
       `⚠ ruledoc: "${feature}" requires a Pro license (${ruleCount} rules detected, free up to ${FREE_TIER_RULE_LIMIT})\n` +
-        `  → Get a license at https://polar.sh/ruledoc\n` +
+        `  → Get a license at https://buy.polar.sh/polar_cl_KepwOnHye5LMqyu286hLpr4Qb6XqW8h2AsBnn1dvs3V\n` +
         `  Running in free mode (${feature} disabled).`,
     );
   }

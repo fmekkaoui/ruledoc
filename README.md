@@ -260,7 +260,7 @@ export RULEDOC_LICENSE=RULEDOC-XXXX-XXXX-XXXX
 }
 ```
 
-**[Get a Pro license →](https://polar.sh/farouk-mekkaoui/products)**
+**[Get a Pro license →](https://buy.polar.sh/polar_cl_KepwOnHye5LMqyu286hLpr4Qb6XqW8h2AsBnn1dvs3V)**
 
 ## GitHub Action
 
