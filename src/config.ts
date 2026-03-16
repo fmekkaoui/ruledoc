@@ -18,13 +18,14 @@ export class ConfigError extends Error {
 // Load config from ruledoc.config.json or package.json
 // ---------------------------------------------------------------------------
 
-function loadConfigFile(cwd: string): Partial<RuledocConfig> | null {
+function loadConfigFile(cwd: string, warnings?: string[]): Partial<RuledocConfig> | null {
   // Only JSON — no eval, no code execution
   const jsonPath = join(cwd, "ruledoc.config.json");
   if (existsSync(jsonPath)) {
     try {
       return JSON.parse(readFileSync(jsonPath, "utf-8"));
     } catch (err) {
+      /* v8 ignore next */
       throw new ConfigError(`Invalid JSON in ruledoc.config.json: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -32,9 +33,12 @@ function loadConfigFile(cwd: string): Partial<RuledocConfig> | null {
   // Warn if user has a JS/TS config (unsupported)
   for (const name of ["ruledoc.config.ts", "ruledoc.config.js", "ruledoc.config.mjs"]) {
     if (existsSync(join(cwd, name))) {
-      console.warn(
-        `⚠ Found ${name} — only ruledoc.config.json is supported. Rename to .json or use the "ruledoc" field in package.json.`,
-      );
+      const msg = `⚠ Found ${name} — only ruledoc.config.json is supported. Rename to .json or use the "ruledoc" field in package.json.`;
+      if (warnings) {
+        warnings.push(msg);
+      } else {
+        console.warn(msg);
+      }
       break;
     }
   }
@@ -127,6 +131,37 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
         config.verbose = true;
         break;
 
+      case "--no-history":
+        config.history = false;
+        break;
+
+      case "--protect": {
+        const val = args[++i];
+        if (val) config.protect = val.split(",").map((s) => s.trim());
+        break;
+      }
+
+      case "--allow-removal":
+        config.allowRemoval = true;
+        break;
+
+      case "--extra-ignore": {
+        const val = args[++i];
+        if (val) {
+          const patterns = val.split(",").map((s) => s.trim());
+          config.extraIgnore = [...(config.extraIgnore || []), ...patterns];
+        }
+        break;
+      }
+
+      case "--no-ignore-tests":
+        config.ignoreTests = false;
+        break;
+
+      case "--no-gitignore":
+        config.gitignore = false;
+        break;
+
       default:
         if (!arg.startsWith("-")) {
           if (!config.src) config.src = arg;
@@ -145,7 +180,7 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
 // Validation
 // ---------------------------------------------------------------------------
 
-const VALID_FORMATS = new Set(["md", "json", "html"]);
+const VALID_FORMATS = new Set(["md", "json", "html", "context"]);
 
 function validate(config: RuledocConfig): void {
   const errors: string[] = [];
@@ -168,7 +203,7 @@ function validate(config: RuledocConfig): void {
   } else {
     for (const f of config.formats) {
       if (!VALID_FORMATS.has(f)) {
-        errors.push(`unknown format "${f}" — valid formats: md, json, html`);
+        errors.push(`unknown format "${f}" — valid formats: ${[...VALID_FORMATS].join(", ")}`);
       }
     }
   }
@@ -187,6 +222,11 @@ function validate(config: RuledocConfig): void {
   // ignore
   if (!Array.isArray(config.ignore)) {
     errors.push("ignore must be an array of directory names");
+  }
+
+  // extraIgnore
+  if (!Array.isArray(config.extraIgnore)) {
+    errors.push("extraIgnore must be an array of glob patterns");
   }
 
   // tag
@@ -216,7 +256,40 @@ function validate(config: RuledocConfig): void {
       try {
         new RegExp(config.pattern);
       } catch (err) {
+        /* v8 ignore next */
         errors.push(`pattern is not a valid regex: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      // Basic ReDoS check: reject nested quantifiers like (a+)+ or (a*)*
+      if (/([+*]|\{\d+,?\d*\})\)?[+*]|\(\?[^)]*[+*][^)]*\)[+*]/.test(config.pattern)) {
+        errors.push("pattern contains nested quantifiers which may cause catastrophic backtracking (ReDoS)");
+      }
+    }
+  }
+
+  // protect + context severity checks share the same set
+  const sevSet = new Set(config.severities);
+
+  // protect
+  if (config.protect.length > 0) {
+    for (const p of config.protect) {
+      if (!sevSet.has(p)) {
+        errors.push(`unknown protected severity "${p}" — valid severities: ${config.severities.join(", ")}`);
+      }
+    }
+  }
+
+  // context options
+  if (config.context) {
+    if (config.context.maxRules !== undefined) {
+      if (!Number.isInteger(config.context.maxRules) || config.context.maxRules <= 0) {
+        errors.push("context.maxRules must be a positive integer");
+      }
+    }
+    if (config.context.severities) {
+      for (const s of config.context.severities) {
+        if (!sevSet.has(s)) {
+          errors.push(`unknown context severity "${s}" — valid severities: ${config.severities.join(", ")}`);
+        }
       }
     }
   }
@@ -235,8 +308,17 @@ function validate(config: RuledocConfig): void {
 // Merge: defaults < config file < CLI flags → validate
 // ---------------------------------------------------------------------------
 
-export function resolveConfig(args: string[], cwd: string = process.cwd()): RuledocConfig {
-  const fileConfig = loadConfigFile(cwd) || {};
+function mergeExtraIgnore(fileValue: unknown, cliValue: string[] | undefined, defaultValue: string[]): string[] {
+  // If file config provides a non-array value, pass it through for validation to catch
+  if (fileValue !== undefined && !Array.isArray(fileValue)) {
+    return fileValue as string[];
+  }
+  const base = (fileValue as string[] | undefined) ?? defaultValue;
+  return [...base, ...(cliValue ?? [])];
+}
+
+export function resolveConfig(args: string[], cwd: string = process.cwd(), warnings?: string[]): RuledocConfig {
+  const fileConfig = loadConfigFile(cwd, warnings) || {};
   const cliConfig = parseCLI(args);
 
   const config: RuledocConfig = {
@@ -248,9 +330,17 @@ export function resolveConfig(args: string[], cwd: string = process.cwd()): Rule
     tag: cliConfig.tag ?? fileConfig.tag ?? DEFAULT_CONFIG.tag,
     severities: cliConfig.severities ?? fileConfig.severities ?? DEFAULT_CONFIG.severities,
     pattern: cliConfig.pattern ?? fileConfig.pattern ?? DEFAULT_CONFIG.pattern,
+    protect: cliConfig.protect ?? fileConfig.protect ?? DEFAULT_CONFIG.protect,
+    allowRemoval: cliConfig.allowRemoval ?? fileConfig.allowRemoval ?? DEFAULT_CONFIG.allowRemoval,
     check: cliConfig.check ?? fileConfig.check ?? DEFAULT_CONFIG.check,
     quiet: cliConfig.quiet ?? fileConfig.quiet ?? DEFAULT_CONFIG.quiet,
     verbose: cliConfig.verbose ?? fileConfig.verbose ?? DEFAULT_CONFIG.verbose,
+    history: cliConfig.history ?? fileConfig.history ?? DEFAULT_CONFIG.history,
+    extraIgnore: mergeExtraIgnore(fileConfig.extraIgnore, cliConfig.extraIgnore, DEFAULT_CONFIG.extraIgnore),
+    ignoreTests: cliConfig.ignoreTests ?? fileConfig.ignoreTests ?? DEFAULT_CONFIG.ignoreTests,
+    gitignore: cliConfig.gitignore ?? fileConfig.gitignore ?? DEFAULT_CONFIG.gitignore,
+    context: cliConfig.context ?? fileConfig.context,
+    license: fileConfig.license,
   };
 
   validate(config);

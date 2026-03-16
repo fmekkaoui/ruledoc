@@ -1,12 +1,27 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { atomicWriteFileSync } from "./atomic-write.js";
 import { ConfigError, resolveConfig } from "./config.js";
-import { computeDiff, loadPreviousRules } from "./diff.js";
+import { printProGate } from "./gate.js";
+import { isProEnabled } from "./license.js";
+
+function deriveOutputPaths(mdPath: string) {
+  return {
+    json: mdPath.replace(/\.md$/, ".json"),
+    history: mdPath.replace(/\.md$/, "_HISTORY.json"),
+    html: mdPath.replace(/\.md$/, ".html"),
+    context: mdPath.replace(/\.md$/, ".context"),
+  };
+}
+
+import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
+import { generateContext } from "./output/context.js";
 import { generateHTML } from "./output/html.js";
 import { generateJSON } from "./output/json.js";
 import { generateMarkdown } from "./output/markdown.js";
 import { extractRules } from "./parser.js";
+import { checkProtection } from "./protect.js";
 import { capitalize } from "./tree.js";
-import type { Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
+import type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleWarning } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Colors
@@ -23,7 +38,8 @@ const k = {
   cyan: "\x1b[36m",
 };
 
-const noColor = !!process.env.NO_COLOR || !process.stdout.isTTY;
+const forceColor = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== "0";
+const noColor = (!!process.env.NO_COLOR || !process.stdout.isTTY) && !forceColor;
 const c = noColor ? (Object.fromEntries(Object.keys(k).map((key) => [key, ""])) as typeof k) : k;
 
 // ---------------------------------------------------------------------------
@@ -57,14 +73,20 @@ ${c.bold}Usage:${c.reset}
 ${c.bold}Options:${c.reset}
   -s, --src <dir>           Source directory (default: ./src)
   -o, --output <file>       Output file (default: ./BUSINESS_RULES.md)
-  -f, --format <formats>    md,json,html (default: md,json)
+  -f, --format <formats>    md,json,html,context (default: md,json)
   -e, --extensions <exts>   .ts,.vue,.py (default: .ts,.tsx,.js,.jsx,.mjs,.cjs,.vue,.svelte)
       --ignore <dirs>       Directories to skip
+      --extra-ignore <globs>  Additional glob patterns to exclude (comma-separated)
+      --no-ignore-tests     Include test files (*.test.*, *.spec.*, __tests__)
+      --no-gitignore        Don't respect .gitignore patterns
   -t, --tag <name>          Annotation tag (default: rule → @rule(...))
       --severities <list>   Severity levels, first is default (default: info,warning,critical)
   -p, --pattern <regex>     Custom regex (overrides --tag)
   -c, --check               CI mode: exit 1 if docs are stale
+      --protect <severities>  Block removal of rules at these severity levels (comma-separated)
+      --allow-removal       Bypass all protection checks
   -q, --quiet               Suppress all output except errors
+      --no-history          Don't track removed rules in history file
       --verbose             List every rule found
       --init                Setup guide and example config
   -h, --help                Show this help
@@ -82,7 +104,8 @@ ${c.bold}Config:${c.reset}
   Reads from: ruledoc.config.json → package.json "ruledoc" → CLI flags
 `;
 
-const VERSION = "0.1.1";
+declare const __RULEDOC_VERSION__: string;
+const VERSION = typeof __RULEDOC_VERSION__ !== "undefined" ? __RULEDOC_VERSION__ : "0.0.0-dev";
 
 // ---------------------------------------------------------------------------
 // Init
@@ -104,15 +127,20 @@ function runInit() {
   console.log(`\nThen run ${c.bold}ruledoc${c.reset} to generate documentation.\n`);
 
   if (!existsSync("ruledoc.config.json")) {
-    writeFileSync(
-      "ruledoc.config.json",
-      `${JSON.stringify({ src: "./src", output: "./BUSINESS_RULES.md", formats: ["md", "json"] }, null, 2)}\n`,
-    );
+    const initConfig = {
+      src: "./src",
+      output: "./BUSINESS_RULES.md",
+      formats: ["md", "json"],
+      // extraIgnore: ["**/generated/**"],
+      // ignoreTests: true,
+      // gitignore: true,
+    };
+    writeFileSync("ruledoc.config.json", `${JSON.stringify(initConfig, null, 2)}\n`);
     console.log(`${c.green}✓${c.reset} Created ruledoc.config.json`);
   }
 
   console.log(
-    `${c.green}✓${c.reset} Add ${c.bold}BUSINESS_RULES.md${c.reset} and ${c.bold}BUSINESS_RULES.json${c.reset} to your .gitignore\n`,
+    `${c.green}✓${c.reset} Add ${c.bold}BUSINESS_RULES.md${c.reset}, ${c.bold}BUSINESS_RULES.json${c.reset}, and ${c.bold}.ruledoc-license.json${c.reset} to your .gitignore\n`,
   );
 }
 
@@ -177,10 +205,21 @@ function printVerbose(log: ReturnType<typeof createLogger>, rules: Rule[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Signal handlers
+// ---------------------------------------------------------------------------
+
+/* v8 ignore next 4 */
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.once(sig, () => {
+    process.exit(128 + (sig === "SIGINT" ? 2 : 15));
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   // Handle flags that don't need config
@@ -199,17 +238,26 @@ function main() {
 
   // Resolve and validate config
   let config: RuledocConfig;
+  const configWarnings: string[] = [];
   try {
-    config = resolveConfig(args);
+    config = resolveConfig(args, process.cwd(), configWarnings);
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(`\n${c.red}✗ ${err.message}${c.reset}\n`);
       process.exit(1);
     }
-    throw err;
+    /* v8 ignore next */
+    throw new Error(`Unexpected error during config resolution: ${err instanceof Error ? err.message : String(err)}`, {
+      cause: err,
+    });
   }
 
   const log = createLogger(config.quiet);
+
+  for (const w of configWarnings) {
+    /* v8 ignore next */
+    log.log(`${c.yellow}${w}${c.reset}`);
+  }
 
   if (!existsSync(config.src)) {
     log.error(`${c.red}✗ Source directory "${config.src}" not found${c.reset}`);
@@ -217,7 +265,7 @@ function main() {
   }
 
   // Extract
-  const { rules, warnings } = extractRules(config);
+  const { rules, warnings, removals } = extractRules(config, process.cwd());
 
   // Stats
   const scopes = new Set(rules.map((r) => r.scope));
@@ -231,19 +279,75 @@ function main() {
       `${warning ? ` · ${c.yellow}${warning} warning${c.reset}` : ""}`,
   );
 
-  // Verbose: list all rules
+  // Pro license check (computed once, reused across all gates)
+  const pro = await isProEnabled(rules.length, config);
+
+  // Verbose: list all rules and show ignore sources
   if (config.verbose) {
+    const gitignoreStatus = config.gitignore ? "✓" : "✗";
+    const testStatus = config.ignoreTests ? "✓" : "✗";
+    const extraCount = config.extraIgnore.length;
+    const extraPart = extraCount > 0 ? ` · ${extraCount} extra pattern${extraCount > 1 ? "s" : ""}` : "";
+    log.log(
+      `${c.cyan}◆ ruledoc:${c.reset} ignore sources: .gitignore ${gitignoreStatus} · test files ${testStatus}${extraPart}`,
+    );
     printVerbose(log, rules);
   }
 
   // Diff
-  const jsonPath = config.output.replace(/\.md$/, ".json");
-  const prev = loadPreviousRules(jsonPath);
+  const paths = deriveOutputPaths(config.output);
+  const prev = loadPreviousRules(paths.json);
   const diff = computeDiff(prev, rules);
   const hasChanges = diff.added.length > 0 || diff.removed.length > 0;
 
   if (prev.length > 0 && hasChanges) {
     printDiff(log, diff);
+  }
+
+  // History (tombstones for removed rules)
+  let history: HistoryEntry[] = [];
+
+  /* v8 ignore next */
+  if (config.history && (pro || printProGate("tombstones", rules.length, config.quiet))) {
+    if (diff.removed.length > 0) {
+      history = appendHistory(paths.history, diff.removed, removals);
+    } else {
+      history = loadHistory(paths.history);
+    }
+  }
+
+  // Protection check
+  /* v8 ignore next */
+  if (
+    config.protect.length > 0 &&
+    !config.allowRemoval &&
+    diff.removed.length > 0 &&
+    (pro || printProGate("protect", rules.length, config.quiet))
+  ) {
+    const protection = checkProtection(diff.removed, removals, config.protect);
+
+    for (const r of protection.acknowledged) {
+      log.log(`  ${c.green}✓${c.reset} [${r.severity}] ${r.fullScope}: acknowledged via @${config.tag}-removed`);
+    }
+
+    if (protection.blocked.length > 0) {
+      for (const r of protection.blocked) {
+        log.error(`  ${c.red}✗${c.reset} [${r.severity}] ${r.fullScope}: ${r.description}`);
+        log.error(`    was in ${r.file}`);
+      }
+
+      if (config.check) {
+        log.error(
+          `\n${c.red}✗ ruledoc: ${protection.blocked.length} critical rule(s) removed — build blocked${c.reset}`,
+        );
+        log.error(`  To allow removal, use --allow-removal or add a @${config.tag}-removed() comment.`);
+        process.exit(2);
+      } else {
+        log.log(
+          `\n${c.yellow}⚠ ruledoc: ${protection.blocked.length} protected rule(s) removed (use --check to enforce)${c.reset}`,
+        );
+      }
+    }
   }
 
   // Warnings
@@ -253,7 +357,7 @@ function main() {
   if (config.check) {
     if (existsSync(config.output)) {
       const existing = readFileSync(config.output, "utf-8");
-      const fresh = generateMarkdown(rules, warnings, config.src);
+      const fresh = generateMarkdown(rules, warnings, history);
       if (existing !== fresh) {
         log.error(`\n${c.red}✗ BUSINESS_RULES.md is stale. Run ruledoc to regenerate.${c.reset}`);
         process.exit(1);
@@ -267,19 +371,24 @@ function main() {
   const outputs: string[] = [];
 
   if (config.formats.includes("md")) {
-    writeFileSync(config.output, generateMarkdown(rules, warnings, config.src));
+    atomicWriteFileSync(config.output, generateMarkdown(rules, warnings, history));
     outputs.push(config.output);
   }
 
   if (config.formats.includes("json")) {
-    writeFileSync(jsonPath, generateJSON(rules, warnings));
-    outputs.push(jsonPath);
+    atomicWriteFileSync(paths.json, generateJSON(rules, warnings));
+    outputs.push(paths.json);
   }
 
   if (config.formats.includes("html")) {
-    const htmlPath = config.output.replace(/\.md$/, ".html");
-    writeFileSync(htmlPath, generateHTML(rules, warnings, config.src));
-    outputs.push(htmlPath);
+    atomicWriteFileSync(paths.html, generateHTML(rules, warnings));
+    outputs.push(paths.html);
+  }
+
+  /* v8 ignore next 3 */
+  if (config.formats.includes("context") && (pro || printProGate("context", rules.length, config.quiet))) {
+    atomicWriteFileSync(paths.context, generateContext(rules, config));
+    outputs.push(paths.context);
   }
 
   for (const o of outputs) {
@@ -287,4 +396,4 @@ function main() {
   }
 }
 
-main();
+await main();

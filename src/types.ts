@@ -41,6 +41,34 @@ export interface RuleDiff {
 }
 
 // ---------------------------------------------------------------------------
+// History (tombstones for removed rules)
+// ---------------------------------------------------------------------------
+
+export interface HistoryEntry {
+  removedAt: string;
+  rule: {
+    scope: string;
+    severity: string;
+    description: string;
+    lastFile: string;
+    lastLine: number;
+  };
+  acknowledged?: { ticket: string; reason: string; file: string; line: number };
+}
+
+// ---------------------------------------------------------------------------
+// Rule removal acknowledgment
+// ---------------------------------------------------------------------------
+
+export interface RuleRemoval {
+  scope: string;
+  ticket: string;
+  reason: string;
+  file: string;
+  line: number;
+}
+
+// ---------------------------------------------------------------------------
 // Warning
 // ---------------------------------------------------------------------------
 
@@ -62,7 +90,7 @@ export interface RuledocConfig {
   output: string;
 
   /** Output formats to generate. Default: ["md", "json"] */
-  formats: ("md" | "json" | "html")[];
+  formats: ("md" | "json" | "html" | "context")[];
 
   /** File extensions to scan. */
   extensions: string[];
@@ -83,6 +111,12 @@ export interface RuledocConfig {
    */
   pattern: string | null;
 
+  /** Severity levels to protect from silent removal. */
+  protect: string[];
+
+  /** Bypass all protection checks. */
+  allowRemoval: boolean;
+
   /** CI mode — exit 1 if generated doc differs from existing. */
   check: boolean;
 
@@ -91,7 +125,47 @@ export interface RuledocConfig {
 
   /** List every rule found in terminal output. */
   verbose: boolean;
+
+  /** Track removed rules in BUSINESS_RULES_HISTORY.json. */
+  history: boolean;
+
+  /** Context format options. */
+  context?: {
+    maxRules?: number;
+    severities?: string[];
+  };
+
+  /** Additional glob patterns to ignore (appended, never replaces). */
+  extraIgnore: string[];
+
+  /** Exclude test files by default. Default: true */
+  ignoreTests: boolean;
+
+  /** Respect .gitignore patterns. Default: true */
+  gitignore: boolean;
+
+  /** Polar.sh license key for Pro features. */
+  license?: string;
 }
+
+export const RULEDOC_DEFAULT_IGNORE = [
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "**/*.test.js",
+  "**/*.test.jsx",
+  "**/*.spec.ts",
+  "**/*.spec.tsx",
+  "**/*.spec.js",
+  "**/*.spec.jsx",
+  "**/__tests__/**",
+];
+
+export const SEVERITY_DISPLAY: Record<string, { emoji: string; color: string; label: string }> = {
+  critical: { emoji: "\uD83D\uDD34", color: "#ef4444", label: "Critical" },
+  warning: { emoji: "\uD83D\uDFE1", color: "#eab308", label: "Warning" },
+  info: { emoji: "\uD83D\uDD35", color: "#3b82f6", label: "Info" },
+};
+export const DEFAULT_SEVERITY_DISPLAY = { emoji: "\u26AA", color: "#9ca3af", label: "" };
 
 export const DEFAULT_SEVERITIES = ["info", "warning", "critical"];
 
@@ -116,9 +190,15 @@ export const DEFAULT_CONFIG: RuledocConfig = {
   tag: "rule",
   severities: DEFAULT_SEVERITIES,
   pattern: null,
+  protect: [],
+  allowRemoval: false,
   check: false,
   quiet: false,
   verbose: false,
+  history: true,
+  extraIgnore: [],
+  ignoreTests: true,
+  gitignore: true,
 };
 
 // ---------------------------------------------------------------------------

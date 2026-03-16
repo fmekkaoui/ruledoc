@@ -259,6 +259,160 @@ describe("extractRules", () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it("returns empty removals by default", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): A rule\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toEqual([]);
+  });
+
+  it("extracts @rule-removed annotation from // comment", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(billing.plans, JIRA-456): Migrated to config service\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("billing.plans");
+    expect(result.removals[0].ticket).toBe("JIRA-456");
+    expect(result.removals[0].reason).toBe("Migrated to config service");
+  });
+
+  it("extracts @rule-removed from block comment", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `/** @rule-removed(auth.session, AUTH-99): No longer needed */\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("auth.session");
+    expect(result.removals[0].ticket).toBe("AUTH-99");
+    expect(result.removals[0].reason).toBe("No longer needed");
+  });
+
+  it("extracts @rule-removed with custom tag", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @brule-removed(billing, TICK-1): Gone\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir, { tag: "brule" }));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("billing");
+  });
+
+  it("extracts multiple removals from same file", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule-removed(billing.plans, JIRA-1): Reason 1",
+        "// @rule-removed(auth.session, JIRA-2): Reason 2",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(2);
+  });
+
+  it("finds annotation on last line with no trailing newline", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): Last line`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Last line");
+    expect(result.rules[0].codeContext).toBe("");
+  });
+
+  it("excludes test files by default (ignoreTests: true)", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Real rule\nfunction pay() {}\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ndescribe('', () => {});\n`);
+    writeFileSync(join(dir, "app.spec.ts"), `// @rule(billing): Spec rule\ndescribe('', () => {});\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Real rule");
+  });
+
+  it("includes test files when ignoreTests is false", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Real rule\nfunction pay() {}\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ndescribe('', () => {});\n`);
+    const result = extractRules(makeConfig(dir, { ignoreTests: false }));
+    expect(result.rules).toHaveLength(2);
+  });
+
+  it("respects .gitignore when gitignore is true", () => {
+    const dir = tmp();
+    const srcDir = join(dir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(srcDir, "generated.ts"), `// @rule(billing): Skip\nconst y = 2;\n`);
+    writeFileSync(join(dir, ".gitignore"), "src/generated.ts\n");
+    const result = extractRules(makeConfig(srcDir, { ignoreTests: false }), dir);
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Keep");
+  });
+
+  it("ignores .gitignore when gitignore is false", () => {
+    const dir = tmp();
+    const srcDir = join(dir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(srcDir, "generated.ts"), `// @rule(billing): Also keep\nconst y = 2;\n`);
+    writeFileSync(join(dir, ".gitignore"), "src/generated.ts\n");
+    const result = extractRules(makeConfig(srcDir, { ignoreTests: false, gitignore: false }), dir);
+    expect(result.rules).toHaveLength(2);
+  });
+
+  it("extraIgnore excludes matching files", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(dir, "generated.ts"), `// @rule(billing): Skip\nconst y = 2;\n`);
+    const result = extractRules(makeConfig(dir, { ignoreTests: false, extraIgnore: ["**/generated.*"] }));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Keep");
+  });
+
+  it("skips isIgnored when gitignore, ignoreTests, and extraIgnore are all off", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "app.ts"), `// @rule(billing): Keep\nconst x = 1;\n`);
+    writeFileSync(join(dir, "app.test.ts"), `// @rule(billing): Test rule\ntest();\n`);
+    const result = extractRules(makeConfig(dir, { gitignore: false, ignoreTests: false, extraIgnore: [] }));
+    // Both files should be included (no filtering)
+    expect(result.rules).toHaveLength(2);
+  });
+
+  it("normalizes severity case to lowercase", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, CRITICAL): Uppercase severity\nfunction pay() {}\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].severity).toBe("critical");
+  });
+
+  it("warns on unreadable files", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "good.ts"), `// @rule(ok): Works\ncode();\n`);
+    writeFileSync(join(dir, "unreadable.ts"), `// @rule(x): Y\nz();\n`, { mode: 0o000 });
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules.some((r) => r.scope === "ok")).toBe(true);
+    const readWarning = result.warnings.find((w) => w.message.includes("could not read file"));
+    expect(readWarning).toBeDefined();
+    expect(readWarning?.line).toBe(0);
+  });
+
+  it("warns and skips files exceeding 10 MB", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "big.ts"), "x".repeat(11 * 1024 * 1024));
+    writeFileSync(join(dir, "ok.ts"), `// @rule(billing): Small file\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].description).toBe("Small file");
+    const sizeWarning = result.warnings.find((w) => w.message.includes("exceeds 10 MB"));
+    expect(sizeWarning).toBeDefined();
+    expect(sizeWarning?.file).toBe("big.ts");
+  });
+
   it("skips code context lines that start with comment markers", () => {
     const dir = tmp();
     writeFileSync(

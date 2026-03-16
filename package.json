@@ -1,6 +1,6 @@
 {
   "name": "ruledoc",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Business rules documentation generator — extract @rule() annotations from code and generate Markdown, JSON and HTML docs.",
   "keywords": [
     "business-rules",
@@ -45,12 +45,14 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:unit": "vitest run src/",
+    "test:e2e": "vitest run tests/",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "biome check .",
