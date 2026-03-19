@@ -1,4 +1,5 @@
 import type { Rule, ScopeTree } from "./types.js";
+import { DEFAULT_SEVERITY_DISPLAY, SEVERITY_DISPLAY } from "./types.js";
 
 export function buildTree(rules: Rule[]): ScopeTree {
   const tree: ScopeTree = {};
@@ -15,5 +16,5 @@ export function capitalize(s: string): string {
 }
 
 export function sevBadge(s: string): string {
-  return { critical: "🔴", warning: "🟡", info: "🔵" }[s] || "⚪";
+  return SEVERITY_DISPLAY[s]?.emoji ?? DEFAULT_SEVERITY_DISPLAY.emoji;
 }

@@ -1,8 +1,13 @@
-import { readFileSync } from "node:fs";
-import { relative } from "node:path";
-import type { Rule, RuledocConfig, RuleWarning } from "./types.js";
-import { buildPattern } from "./types.js";
+import { readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { loadGitignore } from "./gitignore.js";
+import { globToRegex, matchesAnyGlob } from "./glob.js";
+import type { Rule, RuledocConfig, RuleRemoval, RuleWarning } from "./types.js";
+import { buildPattern, RULEDOC_DEFAULT_IGNORE } from "./types.js";
 import { walkFiles } from "./walker.js";
+
+// Pre-compiled regexes for default test file patterns (avoids re-compilation per call)
+const RULEDOC_DEFAULT_REGEXES = RULEDOC_DEFAULT_IGNORE.map(globToRegex);
 
 // ---------------------------------------------------------------------------
 // Levenshtein distance for "did you mean?" suggestions
@@ -98,34 +103,97 @@ function parseParams(raw: string, severities: string[], defaultSeverity: string)
 export interface ExtractionResult {
   rules: Rule[];
   warnings: RuleWarning[];
+  removals: RuleRemoval[];
 }
 
-export function extractRules(config: RuledocConfig): ExtractionResult {
+export function extractRules(config: RuledocConfig, cwd: string = process.cwd()): ExtractionResult {
   const extensions = new Set(config.extensions);
   const ignored = new Set(config.ignore);
   const onSkip = config.verbose
     ? (path: string, reason: string) => console.warn(`skipped ${path}: ${reason}`)
     : undefined;
-  const files = walkFiles(config.src, extensions, ignored, onSkip);
+
+  // Build combined isIgnored function from three layers
+  const gitignoreFilter = config.gitignore ? loadGitignore(cwd) : null;
+  const testRegexes = config.ignoreTests ? RULEDOC_DEFAULT_REGEXES : [];
+  /* v8 ignore next */
+  const extraRegexes = (config.extraIgnore || []).map(globToRegex);
+  // Pre-compute src path relative to cwd for gitignore matching (e.g. "src" or "./src" → "src")
+  const srcRelPrefix = relative(cwd, resolve(cwd, config.src));
+
+  const isIgnored =
+    gitignoreFilter || testRegexes.length > 0 || extraRegexes.length > 0
+      ? (relativePath: string, _isDirectory: boolean): boolean => {
+          if (gitignoreFilter) {
+            const relToCwd = join(srcRelPrefix, relativePath);
+            if (gitignoreFilter(relToCwd)) return true;
+          }
+          if (testRegexes.length > 0 && matchesAnyGlob(relativePath, testRegexes)) return true;
+          if (extraRegexes.length > 0 && matchesAnyGlob(relativePath, extraRegexes)) return true;
+          return false;
+        }
+      : undefined;
+
+  const files = walkFiles(config.src, extensions, ignored, onSkip, isIgnored);
   const pattern = config.pattern || buildPattern(config.tag);
   const regex = new RegExp(pattern, "gim");
   const severities = config.severities;
   const defaultSeverity = severities[0] || "info";
   const rules: Rule[] = [];
   const warnings: RuleWarning[] = [];
+  const removals: RuleRemoval[] = [];
+  const escapedTag = config.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const removalRegex = new RegExp(
+    String.raw`@${escapedTag}-removed\(([^,)]+),\s*([^)]+)\)\s*:?\s*(.+?)(?:\s*\*\/)?$`,
+    "i",
+  );
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
   for (const filePath of files) {
+    try {
+      const size = statSync(filePath).size;
+      if (size > MAX_FILE_SIZE) {
+        warnings.push({
+          file: relative(config.src, filePath),
+          line: 0,
+          message: `skipped: file exceeds 10 MB (${(size / 1024 / 1024).toFixed(1)} MB)`,
+        });
+        continue;
+      }
+    } catch {
+      // If stat fails, try reading anyway — readFileSync will catch it
+    }
+
     let content: string;
     try {
       content = readFileSync(filePath, "utf-8");
-    } catch {
+    } catch (err) {
+      warnings.push({
+        file: relative(config.src, filePath),
+        line: 0,
+        /* v8 ignore next */
+        message: `could not read file: ${err instanceof Error ? err.message : String(err)}`,
+      });
       continue;
     }
 
     const relFile = relative(config.src, filePath);
-    const lines = content.split("\n");
+    const lines = content.split(/\r?\n/);
 
     for (let i = 0; i < lines.length; i++) {
+      // Check for @rule-removed annotation
+      const removalMatch = removalRegex.exec(lines[i]);
+      if (removalMatch) {
+        removals.push({
+          scope: removalMatch[1].trim(),
+          ticket: removalMatch[2].trim(),
+          reason: removalMatch[3].trim(),
+          file: relFile,
+          line: i + 1,
+        });
+      }
+
       regex.lastIndex = 0;
       const match = regex.exec(lines[i]);
       if (!match) continue;
@@ -179,5 +247,5 @@ export function extractRules(config: RuledocConfig): ExtractionResult {
     }
   }
 
-  return { rules, warnings };
+  return { rules, warnings, removals };
 }

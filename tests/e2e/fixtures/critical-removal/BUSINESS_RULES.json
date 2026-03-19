@@ -1,0 +1,58 @@
+{
+  "generated": "2025-01-01T00:00:00.000Z",
+  "total": 2,
+  "tree": {
+    "Billing": {
+      "Plans": [
+        {
+          "scope": "billing",
+          "subscope": "plans",
+          "fullScope": "billing.plans",
+          "severity": "critical",
+          "ticket": "",
+          "description": "Free plan limited to 50 items",
+          "file": "src/billing.ts",
+          "line": 1,
+          "codeContext": "export function checkPlanLimit(count: number) {"
+        }
+      ],
+      "Refunds": [
+        {
+          "scope": "billing",
+          "subscope": "refunds",
+          "fullScope": "billing.refunds",
+          "severity": "info",
+          "ticket": "",
+          "description": "Refunds only within 30 days",
+          "file": "src/billing.ts",
+          "line": 1,
+          "codeContext": "export function canRefund(purchaseDate: Date) {"
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "scope": "billing",
+      "subscope": "plans",
+      "fullScope": "billing.plans",
+      "severity": "critical",
+      "ticket": "",
+      "description": "Free plan limited to 50 items",
+      "file": "src/billing.ts",
+      "line": 1,
+      "codeContext": "export function checkPlanLimit(count: number) {"
+    },
+    {
+      "scope": "billing",
+      "subscope": "refunds",
+      "fullScope": "billing.refunds",
+      "severity": "info",
+      "ticket": "",
+      "description": "Refunds only within 30 days",
+      "file": "src/billing.ts",
+      "line": 1,
+      "codeContext": "export function canRefund(purchaseDate: Date) {"
+    }
+  ]
+}

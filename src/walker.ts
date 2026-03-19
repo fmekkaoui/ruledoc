@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
+import { extname, join, relative } from "node:path";
 
 // Entries that are hidden on Windows but don't start with "."
 const WIN_HIDDEN = new Set(["$RECYCLE.BIN", "System Volume Information", "Thumbs.db", "desktop.ini"]);
@@ -13,25 +13,40 @@ export function walkFiles(
   extensions: Set<string>,
   ignored: Set<string>,
   onSkip?: (path: string, reason: string) => void,
+  isIgnored?: (relativePath: string, isDirectory: boolean) => boolean,
+  rootDir?: string,
 ): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
+  const root = rootDir ?? dir;
 
   for (const entry of readdirSync(dir)) {
     if (isHidden(entry) || ignored.has(entry)) continue;
 
     const fullPath = join(dir, entry);
-    let stat: ReturnType<typeof statSync>;
+    let lstat: ReturnType<typeof lstatSync>;
     try {
-      stat = statSync(fullPath);
+      lstat = lstatSync(fullPath);
+      /* v8 ignore start */
     } catch (err) {
       onSkip?.(fullPath, err instanceof Error ? err.message : String(err));
       continue;
     }
+    /* v8 ignore stop */
 
-    if (stat.isDirectory()) {
-      results.push(...walkFiles(fullPath, extensions, ignored, onSkip));
+    if (lstat.isSymbolicLink()) {
+      onSkip?.(fullPath, "symlink");
+      continue;
+    }
+
+    const isDir = lstat.isDirectory();
+    const rel = isIgnored ? relative(root, fullPath) : "";
+
+    if (isDir) {
+      if (isIgnored && isIgnored(rel, true)) continue;
+      results.push(...walkFiles(fullPath, extensions, ignored, onSkip, isIgnored, root));
     } else if (extensions.has(extname(entry))) {
+      if (isIgnored && isIgnored(rel, false)) continue;
       results.push(fullPath);
     }
   }

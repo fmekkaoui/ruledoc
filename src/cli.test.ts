@@ -17,6 +17,8 @@ beforeEach(() => {
   warns = [];
   exitCode = undefined;
   originalCwd = process.cwd();
+  process.env.NO_COLOR = "1";
+  delete process.env.FORCE_COLOR;
 
   vi.spyOn(process, "exit").mockImplementation((code?: number | string | null | undefined) => {
     exitCode = (code ?? 0) as number;
@@ -36,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   process.chdir(originalCwd);
   rmSync(tmpDir, { recursive: true, force: true });
+  delete process.env.NO_COLOR;
   vi.restoreAllMocks();
 });
 
@@ -71,13 +74,13 @@ describe("cli", () => {
     it("prints version and exits 0", async () => {
       await runCLI(["--version"]);
       expect(exitCode).toBe(0);
-      expect(logs.join("\n")).toContain("0.1.1");
+      expect(logs.join("\n")).toMatch(/\d+\.\d+\.\d+/);
     });
 
     it("prints version with -v flag", async () => {
       await runCLI(["-v"]);
       expect(exitCode).toBe(0);
-      expect(logs.join("\n")).toContain("0.1.1");
+      expect(logs.join("\n")).toMatch(/\d+\.\d+\.\d+/);
     });
   });
 
@@ -390,6 +393,39 @@ describe("cli", () => {
     });
   });
 
+  describe("verbose with ignore source details", () => {
+    it("shows gitignore disabled and extra patterns in verbose", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): A rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      await runCLI([
+        "--src",
+        srcDir,
+        "--output",
+        join(tmpDir, "out.md"),
+        "--verbose",
+        "--no-gitignore",
+        "--no-ignore-tests",
+        "--extra-ignore",
+        "**/gen/**,**/vendor/**",
+      ]);
+      const output = logs.join("\n");
+      expect(output).toContain("2 extra pattern");
+    });
+
+    it("shows singular extra pattern count", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): A rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      await runCLI(["--src", srcDir, "--output", join(tmpDir, "out.md"), "--verbose", "--extra-ignore", "**/gen/**"]);
+      const output = logs.join("\n");
+      expect(output).toContain("1 extra pattern");
+      expect(output).not.toContain("patterns");
+    });
+  });
+
   describe("verbose with non-info severity", () => {
     it("shows severity tag in verbose for non-info rules", async () => {
       const srcDir = join(tmpDir, "src");
@@ -482,12 +518,172 @@ describe("cli", () => {
         thrownError = e;
       }
 
-      // Should re-throw the TypeError, not catch it as ConfigError
-      expect(thrownError).toBeInstanceOf(TypeError);
-      expect((thrownError as TypeError).message).toBe("unexpected error");
+      // Should re-throw wrapped error with cause
+      expect(thrownError).toBeInstanceOf(Error);
+      expect((thrownError as Error).message).toContain("unexpected error");
+      expect((thrownError as Error).cause).toBeInstanceOf(TypeError);
 
       // Clean up mock so it doesn't leak to subsequent tests
       vi.doUnmock("./config.js");
+    });
+  });
+
+  describe("history", () => {
+    it("creates history file when rules are removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with a rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing): Old rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+
+      // Remove the rule
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(true);
+      const history = JSON.parse(readFileSync(historyPath, "utf-8"));
+      expect(history).toHaveLength(1);
+      expect(history[0].rule.description).toBe("Old rule");
+
+      // Markdown should have Removed Rules section
+      const md = readFileSync(outMd, "utf-8");
+      expect(md).toContain("Removed Rules");
+      expect(md).toContain("Old rule");
+    });
+
+    it("does not create history file with --no-history", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with a rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing): Old rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+
+      // Remove the rule with --no-history
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--no-history"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(false);
+
+      // Markdown should NOT have Removed Rules section
+      const md = readFileSync(outMd, "utf-8");
+      expect(md).not.toContain("Removed Rules");
+    });
+
+    it("does not create history file when no rules are removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): My rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const historyPath = join(tmpDir, "BUSINESS_RULES_HISTORY.json");
+      expect(existsSync(historyPath)).toBe(false);
+    });
+  });
+
+  describe("--protect", () => {
+    it("exits 2 with --check --protect critical when critical rule removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with critical rule
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Remove the critical rule
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical"]);
+      expect(exitCode).toBe(2);
+      expect(errors.join("\n")).toContain("build blocked");
+    });
+
+    it("warns without --check when protected rule removed", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--protect", "critical"]);
+      // Should not exit 2 without --check
+      expect(exitCode).toBeUndefined();
+      expect(logs.join("\n")).toContain("protected rule(s) removed");
+    });
+
+    it("--allow-removal bypasses protection", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI([
+        "--src",
+        srcDir,
+        "--output",
+        outMd,
+        "--format",
+        "md,json",
+        "--check",
+        "--protect",
+        "critical",
+        "--allow-removal",
+      ]);
+      // Should not exit 2
+      expect(exitCode).not.toBe(2);
+    });
+
+    it("@rule-removed acknowledgment unblocks protected removal", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing.plans, critical): Plan limit\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Remove rule but add @rule-removed acknowledgment
+      writeFileSync(
+        join(srcDir, "billing.ts"),
+        "// @rule-removed(billing.plans, JIRA-456): Migrated to config service\nconst x = 1;\n",
+      );
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json", "--check", "--protect", "critical"]);
+      // Should not exit 2 — acknowledged
+      expect(exitCode).not.toBe(2);
+      expect(logs.join("\n")).toContain("acknowledged");
     });
   });
 

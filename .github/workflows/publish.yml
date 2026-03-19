@@ -30,9 +30,11 @@ jobs:
 
       - run: npm run typecheck
 
-      - run: npm run test:coverage
-
       - run: npm run build
+
+      - run: npm run test:unit -- --coverage
+
+      - run: npm run test:e2e
 
       # Check if this version is already published
       - name: Check version

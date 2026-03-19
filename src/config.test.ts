@@ -98,6 +98,15 @@ describe("resolveConfig", () => {
     expect(spy).toHaveBeenCalledWith(expect.stringContaining("ruledoc.config.ts"));
   });
 
+  it("collects config warnings into array when provided", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "ruledoc.config.ts"), "export default {}");
+    const warnings: string[] = [];
+    resolveConfig([], dir, warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("ruledoc.config.ts");
+  });
+
   it("warns on .js config file", () => {
     const dir = tmp();
     writeFileSync(join(dir, "ruledoc.config.js"), "module.exports = {}");
@@ -215,6 +224,41 @@ describe("parseCLI flags", () => {
     expect(resolveConfig(["--verbose"], dir).verbose).toBe(true);
   });
 
+  it("--no-history", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--no-history"], dir).history).toBe(false);
+  });
+
+  it("history defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).history).toBe(true);
+  });
+
+  it("--protect critical", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--protect", "critical"], dir).protect).toEqual(["critical"]);
+  });
+
+  it("--protect critical,warning", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--protect", "critical,warning"], dir).protect).toEqual(["critical", "warning"]);
+  });
+
+  it("--allow-removal", () => {
+    const dir = tmp();
+    expect(resolveConfig(["--allow-removal"], dir).allowRemoval).toBe(true);
+  });
+
+  it("protect defaults to empty array", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).protect).toEqual([]);
+  });
+
+  it("allowRemoval defaults to false", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).allowRemoval).toBe(false);
+  });
+
   it("--format with no value does not set formats", () => {
     const dir = tmp();
     // --format at end of args with no following value
@@ -245,6 +289,58 @@ describe("parseCLI flags", () => {
     const config = resolveConfig(["./mysrc", "./OUT.md"], dir);
     expect(config.src).toBe("./mysrc");
     expect(config.output).toBe("./OUT.md");
+  });
+
+  it("--protect with no value does not set protect", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--protect"], dir);
+    expect(config.protect).toEqual([]);
+  });
+
+  it("--extra-ignore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--extra-ignore", "**/generated/**,**/vendor/**"], dir);
+    expect(config.extraIgnore).toEqual(["**/generated/**", "**/vendor/**"]);
+  });
+
+  it("--extra-ignore appends to file config", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "ruledoc.config.json"), JSON.stringify({ extraIgnore: ["**/old/**"] }));
+    const config = resolveConfig(["--extra-ignore", "**/new/**"], dir);
+    expect(config.extraIgnore).toEqual(["**/old/**", "**/new/**"]);
+  });
+
+  it("--extra-ignore with no value does not set extraIgnore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--extra-ignore"], dir);
+    expect(config.extraIgnore).toEqual(DEFAULT_CONFIG.extraIgnore);
+  });
+
+  it("--no-ignore-tests", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--no-ignore-tests"], dir);
+    expect(config.ignoreTests).toBe(false);
+  });
+
+  it("ignoreTests defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).ignoreTests).toBe(true);
+  });
+
+  it("--no-gitignore", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--no-gitignore"], dir);
+    expect(config.gitignore).toBe(false);
+  });
+
+  it("gitignore defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).gitignore).toBe(true);
+  });
+
+  it("extraIgnore defaults to empty array", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).extraIgnore).toEqual([]);
   });
 });
 
@@ -323,6 +419,13 @@ describe("validation", () => {
     expect(() => resolveConfig([], dir)).toThrow(/ignore must be an array/);
   });
 
+  it("extraIgnore not array throws", () => {
+    const dir = tmp();
+    configFile(dir, { extraIgnore: "bad" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/extraIgnore must be an array/);
+  });
+
   it("empty tag throws", () => {
     const dir = tmp();
     configFile(dir, { tag: "" });
@@ -365,6 +468,24 @@ describe("validation", () => {
     expect(() => resolveConfig([], dir)).toThrow(/pattern is not a valid regex/);
   });
 
+  it("unknown protected severity throws", () => {
+    const dir = tmp();
+    expect(() => resolveConfig(["--protect", "nonexistent"], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig(["--protect", "nonexistent"], dir)).toThrow(/unknown protected severity/);
+  });
+
+  it("valid protected severity passes", () => {
+    const dir = tmp();
+    expect(() => resolveConfig(["--protect", "critical"], dir)).not.toThrow();
+  });
+
+  it("protect from config file", () => {
+    const dir = tmp();
+    configFile(dir, { protect: ["critical"] });
+    const config = resolveConfig([], dir);
+    expect(config.protect).toEqual(["critical"]);
+  });
+
   it("quiet + verbose together throws", () => {
     const dir = tmp();
     expect(() => resolveConfig(["--quiet", "--verbose"], dir)).toThrow(ConfigError);
@@ -397,5 +518,38 @@ describe("validation", () => {
     configFile(dir, { pattern: "(@\\w+)\\s+(.+)" });
     const config = resolveConfig([], dir);
     expect(config.pattern).toBe("(@\\w+)\\s+(.+)");
+  });
+
+  it("pattern with nested quantifiers (ReDoS) throws", () => {
+    const dir = tmp();
+    configFile(dir, { pattern: "(a+)+" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/nested quantifiers/);
+  });
+
+  it("context.maxRules must be a positive integer", () => {
+    const dir = tmp();
+    configFile(dir, { context: { maxRules: -1 } });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/context.maxRules must be a positive integer/);
+  });
+
+  it("context.maxRules accepts valid positive integer", () => {
+    const dir = tmp();
+    configFile(dir, { context: { maxRules: 10 } });
+    expect(() => resolveConfig([], dir)).not.toThrow();
+  });
+
+  it("context.severities with unknown severity throws", () => {
+    const dir = tmp();
+    configFile(dir, { context: { severities: ["nonexistent"] } });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/unknown context severity/);
+  });
+
+  it("context.severities with valid severity passes", () => {
+    const dir = tmp();
+    configFile(dir, { context: { severities: ["critical"] } });
+    expect(() => resolveConfig([], dir)).not.toThrow();
   });
 });

@@ -30,9 +30,15 @@ describe("DEFAULT_CONFIG", () => {
       tag: "rule",
       severities: DEFAULT_SEVERITIES,
       pattern: null,
+      protect: [],
+      allowRemoval: false,
       check: false,
       quiet: false,
       verbose: false,
+      history: true,
+      extraIgnore: [],
+      ignoreTests: true,
+      gitignore: true,
     });
   });
 });
