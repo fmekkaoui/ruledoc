@@ -235,7 +235,7 @@ describe("appendHistory", () => {
         line: 42,
       }),
     ];
-    const removals = [{ id: "", scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10 }];
+    const removals = [{ id: "", scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10, replacedBy: "" }];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
     expect(result[0].acknowledged).toEqual({
@@ -258,8 +258,8 @@ describe("appendHistory", () => {
     const file = join(tmpDir, "dup-scope-history.json");
     const removed = [makeRule({ description: "dup test", fullScope: "billing.plans" })];
     const removals = [
-      { id: "", scope: "billing.plans", ticket: "JIRA-1", reason: "First", file: "a.ts", line: 1 },
-      { id: "", scope: "billing.plans", ticket: "JIRA-2", reason: "Second", file: "b.ts", line: 2 },
+      { id: "", scope: "billing.plans", ticket: "JIRA-1", reason: "First", file: "a.ts", line: 1, replacedBy: "" },
+      { id: "", scope: "billing.plans", ticket: "JIRA-2", reason: "Second", file: "b.ts", line: 2, replacedBy: "" },
     ];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
@@ -279,7 +279,7 @@ describe("appendHistory", () => {
         line: 42,
       }),
     ];
-    const removals = [{ id: "RUL-001", scope: "", ticket: "JIRA-789", reason: "ID-based removal", file: "plans.ts", line: 5 }];
+    const removals = [{ id: "RUL-001", scope: "", ticket: "JIRA-789", reason: "ID-based removal", file: "plans.ts", line: 5, replacedBy: "" }];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
     expect(result[0].acknowledged).toEqual({
@@ -311,5 +311,63 @@ describe("appendHistory", () => {
     // Verify file was written correctly
     const onDisk = JSON.parse(readFileSync(file, "utf-8"));
     expect(onDisk).toHaveLength(2);
+  });
+
+  it("populates replacedBy from rule supersededBy", () => {
+    const file = join(tmpDir, "replaced-super-history.json");
+    const removed = [
+      makeRule({
+        description: "old rule",
+        fullScope: "billing",
+        supersededBy: "RUL-002",
+      }),
+    ];
+    const result = appendHistory(file, removed);
+    expect(result).toHaveLength(1);
+    expect(result[0].replacedBy).toBe("RUL-002");
+  });
+
+  it("populates replacedBy from removal acknowledgment", () => {
+    const file = join(tmpDir, "replaced-ack-history.json");
+    const removed = [
+      makeRule({
+        id: "RUL-001",
+        description: "ack replaced",
+        fullScope: "billing",
+      }),
+    ];
+    const removals = [{ id: "RUL-001", scope: "", ticket: "JIRA-1", reason: "Gone", file: "a.ts", line: 1, replacedBy: "RUL-003" }];
+    const result = appendHistory(file, removed, removals);
+    expect(result).toHaveLength(1);
+    expect(result[0].replacedBy).toBe("RUL-003");
+  });
+
+  it("prefers removal acknowledgment replacedBy over rule supersededBy", () => {
+    const file = join(tmpDir, "replaced-prefer-history.json");
+    const removed = [
+      makeRule({
+        id: "RUL-001",
+        description: "both sources",
+        fullScope: "billing",
+        supersededBy: "RUL-FROM-SUPER",
+      }),
+    ];
+    const removals = [{ id: "RUL-001", scope: "", ticket: "JIRA-1", reason: "Gone", file: "a.ts", line: 1, replacedBy: "RUL-FROM-ACK" }];
+    const result = appendHistory(file, removed, removals);
+    expect(result).toHaveLength(1);
+    expect(result[0].replacedBy).toBe("RUL-FROM-ACK");
+  });
+
+  it("does not set replacedBy when neither source has it", () => {
+    const file = join(tmpDir, "no-replaced-history.json");
+    const removed = [
+      makeRule({
+        description: "no replacement",
+        fullScope: "billing",
+      }),
+    ];
+    const result = appendHistory(file, removed);
+    expect(result).toHaveLength(1);
+    expect(result[0].replacedBy).toBeUndefined();
   });
 });

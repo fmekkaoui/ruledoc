@@ -594,6 +594,51 @@ describe("cli", () => {
     });
   });
 
+  describe("tombstone ID reuse", () => {
+    it("warns when a tombstoned rule ID is reused", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // Run 1: create rule with ID
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing, RUL-001): Original rule\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Run 2: remove the rule
+      writeFileSync(join(srcDir, "billing.ts"), "const x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+      errors = [];
+
+      // Run 3: recreate a rule with the same ID
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing, RUL-001): Reused ID rule\nconst x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const output = logs.join("\n");
+      expect(output).toContain("was previously removed and should not be reused");
+    });
+  });
+
+  describe("context format", () => {
+    it("generates context file with --format context", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): Context rule\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "context"]);
+      expect(existsSync(join(tmpDir, "BUSINESS_RULES.context"))).toBe(true);
+      const ctx = readFileSync(join(tmpDir, "BUSINESS_RULES.context"), "utf-8");
+      expect(ctx).toContain("Business Rules");
+      expect(ctx).toContain("Context rule");
+    });
+  });
+
   describe("--protect", () => {
     it("exits 2 with --check --protect critical when critical rule removed", async () => {
       const srcDir = join(tmpDir, "src");

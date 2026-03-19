@@ -768,6 +768,33 @@ describe("extractRules", () => {
     expect(refWarning).toBeDefined();
   });
 
+  it("extracts @replacedBy continuation line from @rule-removed", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule-removed(RUL-001, JIRA-456): Migrated to new rule",
+        "// @replacedBy: RUL-002",
+        "// @rule(billing, RUL-002): New rule",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].replacedBy).toBe("RUL-002");
+  });
+
+  it("sets empty replacedBy when no @replacedBy continuation", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(RUL-001, JIRA-456): Migrated\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].replacedBy).toBe("");
+  });
+
   it("warns on supersededBy referencing unknown rule ID", () => {
     const dir = tmp();
     writeFileSync(

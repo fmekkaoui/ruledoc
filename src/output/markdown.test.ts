@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Rule, RuleWarning } from "../types.js";
+import type { HistoryEntry, Rule, RuleWarning } from "../types.js";
 import { generateMarkdown } from "./markdown.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
@@ -353,6 +353,18 @@ describe("generateMarkdown", () => {
     const md = generateMarkdown(rules, []);
     expect(md).toContain("`RUL-010`");
     expect(md).toContain('<a id="rule-RUL-010"></a>');
+  });
+
+  it("renders replacedBy link in removed rules section", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "RUL-001", scope: "billing", severity: "critical", description: "Old billing rule", lastFile: "billing.ts", lastLine: 42 },
+        replacedBy: "RUL-002",
+      },
+    ];
+    const md = generateMarkdown([], [], history);
+    expect(md).toContain("Replaced by [`RUL-002`](#rule-RUL-002)");
   });
 
   it("TOC shows subscope counts separately from scope count", () => {

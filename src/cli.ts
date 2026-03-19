@@ -323,6 +323,21 @@ async function main() {
     }
   }
 
+  // Tombstone ID reuse check
+  if (config.history) {
+    const tombstonedIds = new Set<string>();
+    for (const e of history) { if (e.rule.id) tombstonedIds.add(e.rule.id); }
+    for (const rule of rules) {
+      if (rule.id && tombstonedIds.has(rule.id)) {
+        warnings.push({
+          file: rule.file,
+          line: rule.line,
+          message: `ID "${rule.id}" was previously removed and should not be reused`,
+        });
+      }
+    }
+  }
+
   // Protection check
   if (config.protect.length > 0 && !config.allowRemoval && diff.removed.length > 0) {
     const protection = checkProtection(diff.removed, removals, config.protect);
@@ -382,12 +397,12 @@ async function main() {
   }
 
   if (config.formats.includes("html")) {
-    atomicWriteFileSync(paths.html, generateHTML(rules, warnings));
+    atomicWriteFileSync(paths.html, generateHTML(rules, warnings, history));
     outputs.push(paths.html);
   }
 
   if (config.formats.includes("context")) {
-    atomicWriteFileSync(paths.context, generateContext(rules, config));
+    atomicWriteFileSync(paths.context, generateContext(rules, config, history));
     outputs.push(paths.context);
   }
 

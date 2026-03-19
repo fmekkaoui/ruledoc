@@ -82,6 +82,8 @@ export interface HistoryEntry {
     lastLine: number;
   };
   acknowledged?: { ticket: string; reason: string; file: string; line: number };
+  /** ID of the rule that replaces this one (from supersededBy or @rule-removed @replacedBy) */
+  replacedBy?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,8 @@ export interface RuleRemoval {
   reason: string;
   file: string;
   line: number;
+  /** ID of the replacement rule, from @replacedBy continuation line */
+  replacedBy: string;
 }
 
 // ---------------------------------------------------------------------------

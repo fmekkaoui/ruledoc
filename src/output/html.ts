@@ -1,5 +1,5 @@
 import { buildTree, capitalize, splitByLifecycle } from "../tree.js";
-import type { Rule, RuleWarning } from "../types.js";
+import type { HistoryEntry, Rule, RuleWarning } from "../types.js";
 import { DEFAULT_SEVERITY_DISPLAY, SEVERITY_DISPLAY } from "../types.js";
 
 function esc(s: string): string {
@@ -19,7 +19,7 @@ function sevLabel(s: string): string {
   return SEVERITY_DISPLAY[s]?.label || s;
 }
 
-export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
+export function generateHTML(rules: Rule[], warnings: RuleWarning[], history: HistoryEntry[] = []): string {
   const { active, historical } = splitByLifecycle(rules);
   const tree = buildTree(active);
   const scopes = Object.keys(tree).sort();
@@ -112,6 +112,35 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
     historicalChunks.push(`</div>`);
   }
   const historicalHTML = historicalChunks.join("");
+
+  // Removed rules (tombstones from history)
+  const removedChunks: string[] = [];
+  if (history.length > 0) {
+    const recent = history.slice(Math.max(0, history.length - 20)).reverse();
+    for (const entry of recent) {
+      const date = entry.removedAt.split("T")[0];
+      const rId = entry.rule.id ? ` id="tombstone-${esc(entry.rule.id)}"` : "";
+      removedChunks.push(`<div class="rule historical-rule tombstone-rule"${rId}>`);
+      removedChunks.push(`<div class="rule-header">`);
+      removedChunks.push(`<span class="sev-dot" style="background:${sevColor(entry.rule.severity)}" title="${sevLabel(entry.rule.severity)}"></span>`);
+      if (entry.rule.id) {
+        removedChunks.push(`<span class="rule-id">${esc(entry.rule.id)}</span> `);
+      }
+      removedChunks.push(`<span class="rule-desc" style="text-decoration:line-through">${esc(entry.rule.description)}</span>`);
+      removedChunks.push(` <code class="ticket">${esc(entry.rule.severity)}</code>`);
+      removedChunks.push(` <code class="ticket">${esc(entry.rule.scope)}</code>`);
+      removedChunks.push(`</div>`);
+      removedChunks.push(`<div class="rule-meta">Removed ${esc(date)} · 📍 <code>${esc(entry.rule.lastFile)}:${entry.rule.lastLine}</code></div>`);
+      if (entry.replacedBy) {
+        removedChunks.push(`<div class="rule-relation">➡️ Replaced by <a href="#rule-${esc(entry.replacedBy)}" class="rule-id">${esc(entry.replacedBy)}</a></div>`);
+      }
+      if (entry.acknowledged) {
+        removedChunks.push(`<div class="rule-meta" style="color:#22c55e">✅ Acknowledged: <code>${esc(entry.acknowledged.ticket)}</code> — ${esc(entry.acknowledged.reason)}</div>`);
+      }
+      removedChunks.push(`</div>`);
+    }
+  }
+  const removedHTML = removedChunks.join("");
 
   const filterChunks: string[] = [`<button class="filter-btn active" data-filter="all">All (${active.length})</button>`];
   for (const s of scopes) {
@@ -214,6 +243,8 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
   <div class="no-results hidden" id="noResults">No rules match your search.</div>
 
   ${historicalHTML}
+
+  ${history.length ? `<details class="historical-section"><summary>Removed Rules (${history.length})</summary>${removedHTML}</details>` : ""}
 
   ${warningsHTML}
 

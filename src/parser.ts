@@ -313,6 +313,15 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
       if (removalMatch) {
         const firstParam = removalMatch[1].trim();
         const isIdRemoval = idPatternRegex.test(firstParam);
+        // Check for @replacedBy continuation line
+        let replacedBy = "";
+        if (i + 1 < lines.length) {
+          const nextContent = stripCommentPrefix(lines[i + 1]);
+          if (nextContent) {
+            const m = META_LINE_RE.exec(nextContent);
+            if (m && m[1] === "replacedBy") replacedBy = m[2].trim();
+          }
+        }
         removals.push({
           id: isIdRemoval ? firstParam.toUpperCase() : "",
           scope: isIdRemoval ? "" : firstParam,
@@ -320,6 +329,7 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
           reason: removalMatch[3].trim(),
           file: relFile,
           line: i + 1,
+          replacedBy,
         });
       }
 
@@ -421,6 +431,13 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
     }
     if (rule.supersededBy && !allIds.has(rule.supersededBy)) {
       warnings.push({ file: rule.file, line: rule.line, message: `supersededBy references unknown rule ID "${rule.supersededBy}"` });
+    }
+  }
+
+  // Warn on @rule-removed @replacedBy references to unknown rule IDs
+  for (const rem of removals) {
+    if (rem.replacedBy && !allIds.has(rem.replacedBy)) {
+      warnings.push({ file: rem.file, line: rem.line, message: `@replacedBy references unknown rule ID "${rem.replacedBy}"` });
     }
   }
 

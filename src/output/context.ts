@@ -1,5 +1,5 @@
 import { splitByLifecycle } from "../tree.js";
-import type { Rule, RuledocConfig } from "../types.js";
+import type { HistoryEntry, Rule, RuledocConfig } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Context format — LLM-optimized flat text output
@@ -20,7 +20,7 @@ function formatRuleLine(r: Rule): string {
   return `${prefix}${desc}${suffix}`;
 }
 
-export function generateContext(rules: Rule[], config: RuledocConfig): string {
+export function generateContext(rules: Rule[], config: RuledocConfig, history: HistoryEntry[] = []): string {
   const { active, historical } = splitByLifecycle(rules);
   const ctx = config.context;
 
@@ -67,6 +67,19 @@ export function generateContext(rules: Rule[], config: RuledocConfig): string {
     for (const r of historical) {
       const tag = r.supersededBy ? `[SUPERSEDED by ${r.supersededBy}]` : r.status === "removed" ? "[REMOVED]" : "[DEPRECATED]";
       lines.push(`${tag} [${r.severity}] ${r.fullScope}: ${r.description} (${r.file}:${r.line})`);
+    }
+  }
+
+  // Tombstones (removed rules from history — last 20)
+  if (history.length > 0) {
+    lines.push("# --- Removed rules (tombstones) ---");
+    const recentTombstones = history.slice(Math.max(0, history.length - 20)).reverse();
+    for (const entry of recentTombstones) {
+      const date = entry.removedAt.split("T")[0];
+      const idPart = entry.rule.id ? `${entry.rule.id} ` : "";
+      const replacedPart = entry.replacedBy ? ` → replaced by ${entry.replacedBy}` : "";
+      const ackPart = entry.acknowledged ? ` (${entry.acknowledged.ticket})` : "";
+      lines.push(`[TOMBSTONE] ${idPart}${entry.rule.scope}: ${entry.rule.description} — removed ${date}${replacedPart}${ackPart}`);
     }
   }
 

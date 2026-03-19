@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Rule, RuledocConfig } from "../types.js";
+import type { HistoryEntry, Rule, RuledocConfig } from "../types.js";
 import { DEFAULT_CONFIG } from "../types.js";
 import { generateContext } from "./context.js";
 
@@ -196,5 +196,48 @@ describe("generateContext", () => {
     expect(ruleLines[0]).toContain("[custom] b:");
     expect(ruleLines[1]).toContain("[other] c:");
     expect(ruleLines[2]).toContain("[info] a:");
+  });
+
+  it("renders tombstones section when history provided", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "RUL-001", scope: "billing", severity: "critical", description: "Old rule", lastFile: "billing.ts", lastLine: 42 },
+      },
+    ];
+    const output = generateContext([], makeConfig(), history);
+    expect(output).toContain("# --- Removed rules (tombstones) ---");
+    expect(output).toContain("[TOMBSTONE] RUL-001 billing: Old rule");
+    expect(output).toContain("removed 2026-01-15");
+  });
+
+  it("does not show tombstones section when no history", () => {
+    const output = generateContext([], makeConfig(), []);
+    expect(output).not.toContain("tombstones");
+    expect(output).not.toContain("[TOMBSTONE]");
+  });
+
+  it("renders replacedBy in tombstone line", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "RUL-001", scope: "billing", severity: "info", description: "replaced", lastFile: "a.ts", lastLine: 1 },
+        replacedBy: "RUL-002",
+      },
+    ];
+    const output = generateContext([], makeConfig(), history);
+    expect(output).toContain("→ replaced by RUL-002");
+  });
+
+  it("renders acknowledged ticket in tombstone line", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "", scope: "auth", severity: "warning", description: "ack rule", lastFile: "auth.ts", lastLine: 5 },
+        acknowledged: { ticket: "JIRA-100", reason: "No longer needed", file: "auth.ts", line: 3 },
+      },
+    ];
+    const output = generateContext([], makeConfig(), history);
+    expect(output).toContain("(JIRA-100)");
   });
 });

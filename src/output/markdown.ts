@@ -104,11 +104,14 @@ export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], history
   // Removed Rules (history)
   if (history.length > 0) {
     l.push("## Removed Rules", "");
-    const recent = [...history].reverse().slice(0, 20);
+    const recent = history.slice(Math.max(0, history.length - 20)).reverse();
     for (const entry of recent) {
       const date = entry.removedAt.split("T")[0];
       l.push(`- ~~${entry.rule.description}~~ \`${entry.rule.scope}\` · \`${entry.rule.severity}\` — removed ${date}`);
       l.push(`  <br>📍 \`${entry.rule.lastFile}:${entry.rule.lastLine}\``);
+      if (entry.replacedBy) {
+        l.push(`  <br>➡️ Replaced by [\`${entry.replacedBy}\`](#rule-${entry.replacedBy})`);
+      }
       if (entry.acknowledged) {
         l.push(`  <br>✅ Acknowledged: \`${entry.acknowledged.ticket}\` — ${entry.acknowledged.reason}`);
       }

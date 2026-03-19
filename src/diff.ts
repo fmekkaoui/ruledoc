@@ -130,6 +130,12 @@ export function appendHistory(historyPath: string, removed: Rule[], removals: Ru
       };
     }
 
+    // Populate replacedBy from the removal acknowledgment or the rule's supersededBy
+    const replacedBy = ack?.replacedBy || r.supersededBy || "";
+    if (replacedBy) {
+      entry.replacedBy = replacedBy;
+    }
+
     history.push(entry);
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Rule, RuleWarning } from "../types.js";
+import type { HistoryEntry, Rule, RuleWarning } from "../types.js";
 import { generateHTML } from "./html.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
@@ -366,5 +366,67 @@ describe("generateHTML", () => {
     const html = generateHTML(rules, []);
     expect(html).toContain('id="rule-RUL-010"');
     expect(html).toContain('href="#rule-RUL-010"');
+  });
+
+  it("renders removed rules (tombstones) section when history provided", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "RUL-001", scope: "billing", severity: "critical", description: "Old billing rule", lastFile: "billing.ts", lastLine: 42 },
+      },
+    ];
+    const html = generateHTML([], [], history);
+    expect(html).toContain("Removed Rules (1)");
+    expect(html).toContain("tombstone-rule");
+    expect(html).toContain("Old billing rule");
+    expect(html).toContain("line-through");
+    expect(html).toContain("2026-01-15");
+    expect(html).toContain("billing.ts:42");
+  });
+
+  it("does not render removed rules section when no history", () => {
+    const html = generateHTML([], [], []);
+    expect(html).not.toContain("Removed Rules");
+    expect(html).not.toContain("tombstone-rule");
+  });
+
+  it("renders replacedBy link in tombstone", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "RUL-001", scope: "billing", severity: "info", description: "replaced rule", lastFile: "a.ts", lastLine: 1 },
+        replacedBy: "RUL-002",
+      },
+    ];
+    const html = generateHTML([], [], history);
+    expect(html).toContain('href="#rule-RUL-002"');
+    expect(html).toContain("Replaced by");
+    expect(html).toContain("RUL-002</a>");
+  });
+
+  it("renders acknowledged tombstone with ticket and reason", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "", scope: "auth", severity: "warning", description: "ack rule", lastFile: "auth.ts", lastLine: 5 },
+        acknowledged: { ticket: "JIRA-100", reason: "No longer needed", file: "auth.ts", line: 3 },
+      },
+    ];
+    const html = generateHTML([], [], history);
+    expect(html).toContain("Acknowledged");
+    expect(html).toContain("JIRA-100");
+    expect(html).toContain("No longer needed");
+  });
+
+  it("escapes HTML in tombstone data", () => {
+    const history: HistoryEntry[] = [
+      {
+        removedAt: "2026-01-15T10:00:00.000Z",
+        rule: { id: "", scope: "xss", severity: "info", description: '<img onerror="hack">', lastFile: "a.ts", lastLine: 1 },
+      },
+    ];
+    const html = generateHTML([], [], history);
+    expect(html).not.toContain('<img onerror="hack">');
+    expect(html).toContain("&lt;img onerror=&quot;hack&quot;&gt;");
   });
 });

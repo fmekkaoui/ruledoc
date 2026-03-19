@@ -1,6 +1,6 @@
 {
   "name": "ruledoc",
-  "version": "0.2.1",
+  "version": "0.1.0",
   "description": "Business rules documentation generator — extract @rule() annotations from code and generate Markdown, JSON and HTML docs.",
   "keywords": [
     "business-rules",
