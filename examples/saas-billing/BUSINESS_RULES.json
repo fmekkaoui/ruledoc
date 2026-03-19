@@ -1,0 +1,246 @@
+{
+  "generated": "2026-03-13T02:56:47.200Z",
+  "total": 10,
+  "tree": {
+    "auth": {
+      "password": [
+        {
+          "scope": "auth",
+          "subscope": "password",
+          "fullScope": "auth.password",
+          "severity": "info",
+          "ticket": "",
+          "description": "Password must be at least 12 characters",
+          "file": "auth/password.ts",
+          "line": 1,
+          "codeContext": "export const MIN_PASSWORD_LENGTH = 12;"
+        },
+        {
+          "scope": "auth",
+          "subscope": "password",
+          "fullScope": "auth.password",
+          "severity": "warning",
+          "ticket": "AUTH-31",
+          "description": "Passwords expire after 90 days for enterprise accounts",
+          "file": "auth/password.ts",
+          "line": 4,
+          "codeContext": "export const PASSWORD_EXPIRY_DAYS = 90;"
+        }
+      ],
+      "session": [
+        {
+          "scope": "auth",
+          "subscope": "session",
+          "fullScope": "auth.session",
+          "severity": "critical",
+          "ticket": "",
+          "description": "Session expires after 24 hours of inactivity",
+          "file": "auth/session.ts",
+          "line": 1,
+          "codeContext": "export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;"
+        },
+        {
+          "scope": "auth",
+          "subscope": "session",
+          "fullScope": "auth.session",
+          "severity": "warning",
+          "ticket": "AUTH-12",
+          "description": "Maximum 3 concurrent sessions per user",
+          "file": "auth/session.ts",
+          "line": 4,
+          "codeContext": "export const MAX_CONCURRENT_SESSIONS = 3;"
+        }
+      ]
+    },
+    "billing": {
+      "refunds": [
+        {
+          "scope": "billing",
+          "subscope": "refunds",
+          "fullScope": "billing.refunds",
+          "severity": "critical",
+          "ticket": "",
+          "description": "Refunds must be requested within 30 days of purchase",
+          "file": "billing/limits.ts",
+          "line": 1,
+          "codeContext": "export const REFUND_WINDOW_DAYS = 30;"
+        }
+      ],
+      "usage": [
+        {
+          "scope": "billing",
+          "subscope": "usage",
+          "fullScope": "billing.usage",
+          "severity": "warning",
+          "ticket": "",
+          "description": "Users exceeding 80% of their plan limit receive a warning email",
+          "file": "billing/limits.ts",
+          "line": 4,
+          "codeContext": "export const USAGE_WARNING_THRESHOLD = 0.8;"
+        }
+      ],
+      "plans": [
+        {
+          "scope": "billing",
+          "subscope": "plans",
+          "fullScope": "billing.plans",
+          "severity": "critical",
+          "ticket": "",
+          "description": "Free plan is limited to 100 API requests per day",
+          "file": "billing/plans.ts",
+          "line": 1,
+          "codeContext": "export const FREE_PLAN_DAILY_LIMIT = 100;"
+        },
+        {
+          "scope": "billing",
+          "subscope": "plans",
+          "fullScope": "billing.plans",
+          "severity": "critical",
+          "ticket": "",
+          "description": "Pro plan allows up to 10,000 API requests per day",
+          "file": "billing/plans.ts",
+          "line": 4,
+          "codeContext": "export const PRO_PLAN_DAILY_LIMIT = 10_000;"
+        },
+        {
+          "scope": "billing",
+          "subscope": "plans",
+          "fullScope": "billing.plans",
+          "severity": "info",
+          "ticket": "BILL-47",
+          "description": "Trial period lasts 14 days with full Pro features",
+          "file": "billing/plans.ts",
+          "line": 7,
+          "codeContext": "export const TRIAL_PERIOD_DAYS = 14;"
+        }
+      ]
+    },
+    "notifications": {
+      "email": [
+        {
+          "scope": "notifications",
+          "subscope": "email",
+          "fullScope": "notifications.email",
+          "severity": "warning",
+          "ticket": "",
+          "description": "Maximum 3 reminder emails per billing cycle",
+          "file": "notifications/email.ts",
+          "line": 1,
+          "codeContext": "export const MAX_REMINDERS_PER_CYCLE = 3;"
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "scope": "auth",
+      "subscope": "password",
+      "fullScope": "auth.password",
+      "severity": "info",
+      "ticket": "",
+      "description": "Password must be at least 12 characters",
+      "file": "auth/password.ts",
+      "line": 1,
+      "codeContext": "export const MIN_PASSWORD_LENGTH = 12;"
+    },
+    {
+      "scope": "auth",
+      "subscope": "password",
+      "fullScope": "auth.password",
+      "severity": "warning",
+      "ticket": "AUTH-31",
+      "description": "Passwords expire after 90 days for enterprise accounts",
+      "file": "auth/password.ts",
+      "line": 4,
+      "codeContext": "export const PASSWORD_EXPIRY_DAYS = 90;"
+    },
+    {
+      "scope": "auth",
+      "subscope": "session",
+      "fullScope": "auth.session",
+      "severity": "critical",
+      "ticket": "",
+      "description": "Session expires after 24 hours of inactivity",
+      "file": "auth/session.ts",
+      "line": 1,
+      "codeContext": "export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;"
+    },
+    {
+      "scope": "auth",
+      "subscope": "session",
+      "fullScope": "auth.session",
+      "severity": "warning",
+      "ticket": "AUTH-12",
+      "description": "Maximum 3 concurrent sessions per user",
+      "file": "auth/session.ts",
+      "line": 4,
+      "codeContext": "export const MAX_CONCURRENT_SESSIONS = 3;"
+    },
+    {
+      "scope": "billing",
+      "subscope": "refunds",
+      "fullScope": "billing.refunds",
+      "severity": "critical",
+      "ticket": "",
+      "description": "Refunds must be requested within 30 days of purchase",
+      "file": "billing/limits.ts",
+      "line": 1,
+      "codeContext": "export const REFUND_WINDOW_DAYS = 30;"
+    },
+    {
+      "scope": "billing",
+      "subscope": "usage",
+      "fullScope": "billing.usage",
+      "severity": "warning",
+      "ticket": "",
+      "description": "Users exceeding 80% of their plan limit receive a warning email",
+      "file": "billing/limits.ts",
+      "line": 4,
+      "codeContext": "export const USAGE_WARNING_THRESHOLD = 0.8;"
+    },
+    {
+      "scope": "billing",
+      "subscope": "plans",
+      "fullScope": "billing.plans",
+      "severity": "critical",
+      "ticket": "",
+      "description": "Free plan is limited to 100 API requests per day",
+      "file": "billing/plans.ts",
+      "line": 1,
+      "codeContext": "export const FREE_PLAN_DAILY_LIMIT = 100;"
+    },
+    {
+      "scope": "billing",
+      "subscope": "plans",
+      "fullScope": "billing.plans",
+      "severity": "critical",
+      "ticket": "",
+      "description": "Pro plan allows up to 10,000 API requests per day",
+      "file": "billing/plans.ts",
+      "line": 4,
+      "codeContext": "export const PRO_PLAN_DAILY_LIMIT = 10_000;"
+    },
+    {
+      "scope": "billing",
+      "subscope": "plans",
+      "fullScope": "billing.plans",
+      "severity": "info",
+      "ticket": "BILL-47",
+      "description": "Trial period lasts 14 days with full Pro features",
+      "file": "billing/plans.ts",
+      "line": 7,
+      "codeContext": "export const TRIAL_PERIOD_DAYS = 14;"
+    },
+    {
+      "scope": "notifications",
+      "subscope": "email",
+      "fullScope": "notifications.email",
+      "severity": "warning",
+      "ticket": "",
+      "description": "Maximum 3 reminder emails per billing cycle",
+      "file": "notifications/email.ts",
+      "line": 1,
+      "codeContext": "export const MAX_REMINDERS_PER_CYCLE = 3;"
+    }
+  ]
+}

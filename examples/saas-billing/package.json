@@ -1,0 +1,7 @@
+{
+  "name": "saas-billing-example",
+  "private": true,
+  "scripts": {
+    "rules": "ruledoc"
+  }
+}
