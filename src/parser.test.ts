@@ -14,6 +14,7 @@ function makeConfig(dir: string, overrides: Partial<RuledocConfig> = {}): Ruledo
   return {
     ...DEFAULT_CONFIG,
     src: dir,
+    idRequired: false,
     ...overrides,
   };
 }
@@ -610,5 +611,148 @@ describe("extractRules", () => {
     );
     const result = extractRules(makeConfig(dir));
     expect(result.rules[0].codeContext).toBe("const authorized = true;");
+  });
+
+  it("parses rule ID from annotation (RUL-001)", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, RUL-001): Has an ID\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].id).toBe("RUL-001");
+  });
+
+  it("parses rule ID with custom prefix", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, BIZ-042): Custom prefix\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir, { idPrefix: "BIZ" }));
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].id).toBe("BIZ-042");
+  });
+
+  it("parses rule ID alongside severity and ticket", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, RUL-005, critical, TICK-1): Full params\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules[0].id).toBe("RUL-005");
+    expect(result.rules[0].severity).toBe("critical");
+    expect(result.rules[0].ticket).toBe("TICK-1");
+  });
+
+  it("defaults id to empty string when no ID present", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): No ID\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules[0].id).toBe("");
+  });
+
+  it("warns on missing required rule ID when idRequired is true", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): No ID here\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir, { idRequired: true }));
+    const idWarning = result.warnings.find((w) => w.message.includes("missing required rule ID"));
+    expect(idWarning).toBeDefined();
+  });
+
+  it("does not warn on missing ID when idRequired is false", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): No ID here\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir, { idRequired: false }));
+    const idWarning = result.warnings.find((w) => w.message.includes("missing required rule ID"));
+    expect(idWarning).toBeUndefined();
+  });
+
+  it("warns on duplicate rule IDs", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, RUL-001): First rule",
+        "const a = 1;",
+        "// @rule(auth, RUL-001): Duplicate ID",
+        "const b = 2;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const dupWarning = result.warnings.find((w) => w.message.includes('duplicate rule ID "RUL-001"'));
+    expect(dupWarning).toBeDefined();
+  });
+
+  it("does not warn when IDs are unique", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, RUL-001): First rule",
+        "const a = 1;",
+        "// @rule(auth, RUL-002): Second rule",
+        "const b = 2;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const dupWarning = result.warnings.find((w) => w.message.includes("duplicate rule ID"));
+    expect(dupWarning).toBeUndefined();
+  });
+
+  it("uppercases rule IDs during parsing", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing, rul-001): Lowercase ID\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules[0].id).toBe("RUL-001");
+  });
+
+  it("@rule-removed works with scope-based matching (backward compat)", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(billing.plans, JIRA-456): Migrated\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].scope).toBe("billing.plans");
+  });
+
+  it("warns on dependsOn referencing unknown rule ID", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, RUL-001): A rule",
+        "// @dependsOn: RUL-999",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const refWarning = result.warnings.find((w) => w.message.includes('dependsOn references unknown rule ID "RUL-999"'));
+    expect(refWarning).toBeDefined();
+  });
+
+  it("warns on conflictsWith referencing unknown rule ID", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, RUL-001): A rule",
+        "// @conflictsWith: RUL-888",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const refWarning = result.warnings.find((w) => w.message.includes('conflictsWith references unknown rule ID "RUL-888"'));
+    expect(refWarning).toBeDefined();
+  });
+
+  it("warns on supersededBy referencing unknown rule ID", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, RUL-001): A rule",
+        "// @supersededBy: RUL-777",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const refWarning = result.warnings.find((w) => w.message.includes('supersededBy references unknown rule ID "RUL-777"'));
+    expect(refWarning).toBeDefined();
   });
 });

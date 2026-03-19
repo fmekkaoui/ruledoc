@@ -59,7 +59,9 @@ export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], history
       for (const r of tree[s][sub]) {
         const tkt = r.ticket ? ` \`${r.ticket}\`` : "";
         const sv = r.severity !== "info" ? ` **[${r.severity}]**` : "";
-        l.push(`- ${sevBadge(r.severity)}${sv} ${r.description}${tkt}`);
+        const idBadge = r.id ? `\`${r.id}\` ` : "";
+        const anchor = r.id ? `<a id="rule-${r.id}"></a>` : "";
+        l.push(`- ${anchor}${sevBadge(r.severity)}${sv} ${idBadge}${r.description}${tkt}`);
         if (r.title) l.push(`  <br>**${r.title}**`);
         if (r.rationale) l.push(`  <br>_${r.rationale}_`);
         if (r.owner) l.push(`  <br>Owner: \`${r.owner}\``);
@@ -88,7 +90,9 @@ export function generateMarkdown(rules: Rule[], warnings: RuleWarning[], history
     l.push("## Historical Rules", "");
     for (const r of historical) {
       const tag = r.supersededBy ? `[SUPERSEDED by ${r.supersededBy}]` : r.status === "removed" ? "[REMOVED]" : "[DEPRECATED]";
-      l.push(`- ~~${r.description}~~ ${tag} \`${r.fullScope}\` · \`${r.severity}\``);
+      const histIdBadge = r.id ? `\`${r.id}\` ` : "";
+      const histAnchor = r.id ? `<a id="rule-${r.id}"></a>` : "";
+      l.push(`- ${histAnchor}~~${r.description}~~ ${tag} ${histIdBadge}\`${r.fullScope}\` · \`${r.severity}\``);
       if (r.title) l.push(`  <br>**${r.title}**`);
       if (r.rationale) l.push(`  <br>_${r.rationale}_`);
       l.push(`  <br>📍 \`${r.file}:${r.line}\``);

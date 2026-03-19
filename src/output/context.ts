@@ -6,7 +6,8 @@ import type { Rule, RuledocConfig } from "../types.js";
 // ---------------------------------------------------------------------------
 
 function formatRuleLine(r: Rule): string {
-  const prefix = `[${r.severity}] ${r.fullScope}: `;
+  const idPart = r.id ? `${r.id} ` : "";
+  const prefix = `[${r.severity}] ${idPart}${r.fullScope}: `;
   const suffix = ` (${r.file}:${r.line})`;
   const maxDesc = 120 - prefix.length - suffix.length;
 

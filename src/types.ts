@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 export interface Rule {
+  /** Stable identifier, e.g. "RUL-001" — empty string when not present */
+  id: string;
   /** Top-level scope, e.g. "billing" */
   scope: string;
   /** Sub-scope, e.g. "plans" — defaults to "_general" */
@@ -168,6 +170,12 @@ export interface RuledocConfig {
   /** Respect .gitignore patterns. Default: true */
   gitignore: boolean;
 
+  /** Prefix for stable rule IDs. Default: "RUL" → matches RUL-\d+ */
+  idPrefix: string;
+
+  /** Require every rule to have an explicit ID. Default: true */
+  idRequired: boolean;
+
 }
 
 export const RULEDOC_DEFAULT_IGNORE = [
@@ -230,6 +238,8 @@ export const DEFAULT_CONFIG: RuledocConfig = {
   extraIgnore: [],
   ignoreTests: true,
   gitignore: true,
+  idPrefix: "RUL",
+  idRequired: true,
 };
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { generateHTML } from "./html.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
   return {
+    id: "",
     scope: "billing",
     subscope: "_general",
     fullScope: "billing",
@@ -342,5 +343,28 @@ describe("generateHTML", () => {
     const rules = [makeRule({ severity: "info" })];
     const html = generateHTML(rules, []);
     expect(html).not.toContain('class="badge critical"');
+  });
+
+  it("renders rule ID as anchor link when present", () => {
+    const rules = [makeRule({ id: "RUL-001" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain('id="rule-RUL-001"');
+    expect(html).toContain('href="#rule-RUL-001"');
+    expect(html).toContain('class="rule-id"');
+    expect(html).toContain("RUL-001</a>");
+  });
+
+  it("does not render rule ID anchor when id is empty", () => {
+    const rules = [makeRule({ id: "" })];
+    const html = generateHTML(rules, []);
+    const rulesSection = html.slice(html.indexOf('id="rules"'));
+    expect(rulesSection).not.toContain('class="rule-id"');
+  });
+
+  it("renders rule ID in historical section", () => {
+    const rules = [makeRule({ id: "RUL-010", status: "deprecated", description: "old" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain('id="rule-RUL-010"');
+    expect(html).toContain('href="#rule-RUL-010"');
   });
 });

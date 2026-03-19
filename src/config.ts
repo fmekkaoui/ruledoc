@@ -162,6 +162,15 @@ function parseCLI(args: string[]): Partial<RuledocConfig> {
         config.gitignore = false;
         break;
 
+      case "--id-prefix": {
+        config.idPrefix = args[++i];
+        break;
+      }
+
+      case "--no-require-ids":
+        config.idRequired = false;
+        break;
+
       default:
         if (!arg.startsWith("-")) {
           if (!config.src) config.src = arg;
@@ -294,6 +303,13 @@ function validate(config: RuledocConfig): void {
     }
   }
 
+  // idPrefix
+  if (typeof config.idPrefix !== "string" || config.idPrefix.trim() === "") {
+    errors.push('idPrefix must be a non-empty string (e.g. "RUL")');
+  } else if (/\s/.test(config.idPrefix)) {
+    errors.push("idPrefix must not contain whitespace");
+  }
+
   // quiet + verbose conflict
   if (config.quiet && config.verbose) {
     errors.push("--quiet and --verbose cannot be used together");
@@ -339,6 +355,8 @@ export function resolveConfig(args: string[], cwd: string = process.cwd(), warni
     extraIgnore: mergeExtraIgnore(fileConfig.extraIgnore, cliConfig.extraIgnore, DEFAULT_CONFIG.extraIgnore),
     ignoreTests: cliConfig.ignoreTests ?? fileConfig.ignoreTests ?? DEFAULT_CONFIG.ignoreTests,
     gitignore: cliConfig.gitignore ?? fileConfig.gitignore ?? DEFAULT_CONFIG.gitignore,
+    idPrefix: cliConfig.idPrefix ?? fileConfig.idPrefix ?? DEFAULT_CONFIG.idPrefix,
+    idRequired: cliConfig.idRequired ?? fileConfig.idRequired ?? DEFAULT_CONFIG.idRequired,
     context: cliConfig.context ?? fileConfig.context,
   };
 

@@ -342,6 +342,28 @@ describe("parseCLI flags", () => {
     const dir = tmp();
     expect(resolveConfig([], dir).extraIgnore).toEqual([]);
   });
+
+  it("--id-prefix", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--id-prefix", "BIZ"], dir);
+    expect(config.idPrefix).toBe("BIZ");
+  });
+
+  it("idPrefix defaults to RUL", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).idPrefix).toBe("RUL");
+  });
+
+  it("--no-require-ids", () => {
+    const dir = tmp();
+    const config = resolveConfig(["--no-require-ids"], dir);
+    expect(config.idRequired).toBe(false);
+  });
+
+  it("idRequired defaults to true", () => {
+    const dir = tmp();
+    expect(resolveConfig([], dir).idRequired).toBe(true);
+  });
 });
 
 describe("validation", () => {
@@ -484,6 +506,20 @@ describe("validation", () => {
     configFile(dir, { protect: ["critical"] });
     const config = resolveConfig([], dir);
     expect(config.protect).toEqual(["critical"]);
+  });
+
+  it("empty idPrefix throws", () => {
+    const dir = tmp();
+    configFile(dir, { idPrefix: "" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/idPrefix must be a non-empty/);
+  });
+
+  it("idPrefix with whitespace throws", () => {
+    const dir = tmp();
+    configFile(dir, { idPrefix: "MY PREFIX" });
+    expect(() => resolveConfig([], dir)).toThrow(ConfigError);
+    expect(() => resolveConfig([], dir)).toThrow(/idPrefix must not contain whitespace/);
   });
 
   it("quiet + verbose together throws", () => {

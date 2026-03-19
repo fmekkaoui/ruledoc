@@ -4,6 +4,7 @@ import type { Rule } from "./types.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
   return {
+    id: "",
     scope: "billing",
     subscope: "_general",
     fullScope: "billing",

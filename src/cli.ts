@@ -86,15 +86,19 @@ ${c.bold}Options:${c.reset}
   -q, --quiet               Suppress all output except errors
       --no-history          Don't track removed rules in history file
       --verbose             List every rule found
+      --id-prefix <prefix>  Prefix for stable rule IDs (default: RUL → RUL-001)
+      --no-require-ids      Don't warn on rules missing an ID
       --init                Setup guide and example config
   -h, --help                Show this help
   -v, --version             Show version
 
 ${c.bold}Annotation format:${c.reset}
+  // @rule(scope, RUL-001): With stable ID
   // @rule(scope): Description
   // @rule(scope.sub): With subscope
   // @rule(scope.sub, critical): With severity
   // @rule(scope.sub, critical, TICKET-123): With ticket
+  // @rule(scope.sub, RUL-002, critical, TICKET-123): ID + severity + ticket
   // @rule(scope.sub, TICKET-123, critical): Order doesn't matter
   // @rule(scope.sub, TICKET-123): Severity defaults to first in --severities
 
@@ -157,14 +161,18 @@ function sevIcon(sev: string): string {
   }
 }
 
+function fmtId(id: string): string {
+  return id ? `${c.cyan}${id}${c.reset} ` : "";
+}
+
 function printDiff(log: ReturnType<typeof createLogger>, diff: RuleDiff) {
   for (const r of diff.added) {
     log.log(
-      `  ${c.green}+${c.reset} ${r.description} ${sevIcon(r.severity)}[${r.severity}]${c.reset} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`,
+      `  ${c.green}+${c.reset} ${fmtId(r.id)}${r.description} ${sevIcon(r.severity)}[${r.severity}]${c.reset} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`,
     );
   }
   for (const r of diff.removed) {
-    log.log(`  ${c.red}-${c.reset} ${r.description} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`);
+    log.log(`  ${c.red}-${c.reset} ${fmtId(r.id)}${r.description} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`);
   }
 }
 
@@ -196,7 +204,7 @@ function printVerbose(log: ReturnType<typeof createLogger>, rules: Rule[]) {
       const sev = sevIcon(r.severity);
       const sevTag = r.severity !== "info" ? `${sev}[${r.severity}]${c.reset} ` : "";
       const tkt = r.ticket ? ` ${c.dim}${r.ticket}${c.reset}` : "";
-      log.log(`    ${sev}●${c.reset} ${sevTag}${r.description}${tkt} ${c.dim}→ ${r.file}:${r.line}${c.reset}`);
+      log.log(`    ${sev}●${c.reset} ${sevTag}${fmtId(r.id)}${r.description}${tkt} ${c.dim}→ ${r.file}:${r.line}${c.reset}`);
     }
   }
   log.log("");

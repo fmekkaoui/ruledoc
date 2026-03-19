@@ -465,7 +465,7 @@ describe("cli", () => {
       mkdirSync(srcDir, { recursive: true });
       writeFileSync(join(srcDir, "test.ts"), "// @rule(billing): Good rule\nconst x = 1;\n");
       process.chdir(tmpDir);
-      await runCLI(["--src", srcDir, "--output", join(tmpDir, "out.md")]);
+      await runCLI(["--src", srcDir, "--output", join(tmpDir, "out.md"), "--no-require-ids"]);
       const output = logs.join("\n");
       // printWarnings returns early for empty, so no warning symbol should appear
       // (the only ⚠ in output should come from warnings)

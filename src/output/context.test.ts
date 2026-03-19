@@ -5,6 +5,7 @@ import { generateContext } from "./context.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
   return {
+    id: "",
     scope: "billing",
     subscope: "_general",
     fullScope: "billing",
@@ -168,6 +169,19 @@ describe("generateContext", () => {
     const ruleLines = output.split("\n").filter((l) => /^\[(?:info|warning|critical)\]/.test(l));
     expect(ruleLines).toHaveLength(1);
     expect(ruleLines[0]).toContain("active rule");
+  });
+
+  it("includes rule ID in output line when present", () => {
+    const rules = [makeRule({ id: "RUL-001", fullScope: "billing", description: "ID rule" })];
+    const output = generateContext(rules, makeConfig());
+    expect(output).toContain("[info] RUL-001 billing:");
+  });
+
+  it("does not include ID part when id is empty", () => {
+    const rules = [makeRule({ id: "", fullScope: "billing", description: "No ID" })];
+    const output = generateContext(rules, makeConfig());
+    expect(output).toContain("[info] billing:");
+    expect(output).not.toContain("[info]  billing:");
   });
 
   it("sorts unknown severities after known ones", () => {

@@ -4,6 +4,7 @@ import { generateMarkdown } from "./markdown.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
   return {
+    id: "",
     scope: "billing",
     subscope: "_general",
     fullScope: "billing",
@@ -332,6 +333,26 @@ describe("generateMarkdown", () => {
     const rules = [makeRule({ status: "", description: "active" })];
     const md = generateMarkdown(rules, []);
     expect(md).not.toContain("## Historical Rules");
+  });
+
+  it("renders rule ID badge and anchor when present", () => {
+    const rules = [makeRule({ id: "RUL-001", description: "ID rule" })];
+    const md = generateMarkdown(rules, []);
+    expect(md).toContain("`RUL-001`");
+    expect(md).toContain('<a id="rule-RUL-001"></a>');
+  });
+
+  it("does not render ID badge when id is empty", () => {
+    const rules = [makeRule({ id: "", description: "no ID rule" })];
+    const md = generateMarkdown(rules, []);
+    expect(md).not.toContain('<a id="rule-"></a>');
+  });
+
+  it("renders rule ID in historical section", () => {
+    const rules = [makeRule({ id: "RUL-010", status: "deprecated", description: "old" })];
+    const md = generateMarkdown(rules, []);
+    expect(md).toContain("`RUL-010`");
+    expect(md).toContain('<a id="rule-RUL-010"></a>');
   });
 
   it("TOC shows subscope counts separately from scope count", () => {

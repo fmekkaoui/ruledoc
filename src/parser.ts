@@ -159,6 +159,7 @@ function suggestSeverity(input: string, severities: string[]): string | null {
 // ---------------------------------------------------------------------------
 
 interface ParsedParams {
+  id: string;
   scope: string;
   subscope: string;
   fullScope: string;
@@ -167,7 +168,7 @@ interface ParsedParams {
   warning: string | null;
 }
 
-function parseParams(raw: string, severities: string[], defaultSeverity: string): ParsedParams {
+function parseParams(raw: string, severities: string[], defaultSeverity: string, idPrefix: string): ParsedParams {
   const parts = raw.split(",").map((s) => s.trim());
   const scopeParts = (parts[0] || "unknown").split(".");
 
@@ -177,10 +178,15 @@ function parseParams(raw: string, severities: string[], defaultSeverity: string)
 
   // Only scope, no other params
   if (parts.length === 1) {
-    return { scope, subscope, fullScope, severity: defaultSeverity, ticket: "", warning: null };
+    return { id: "", scope, subscope, fullScope, severity: defaultSeverity, ticket: "", warning: null };
   }
 
   const sevSet = new Set(severities.map((s) => s.toLowerCase()));
+
+  const escapedPrefix = idPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const idRegex = new RegExp(`^${escapedPrefix}-\\d+$`, "i");
+
+  let id = "";
   const extras = parts.slice(1);
 
   let severity = defaultSeverity;
@@ -190,7 +196,10 @@ function parseParams(raw: string, severities: string[], defaultSeverity: string)
   for (const param of extras) {
     const lower = param.toLowerCase();
 
-    if (sevSet.has(lower)) {
+    if (idRegex.test(param)) {
+      // It's a rule ID
+      id = param.toUpperCase();
+    } else if (sevSet.has(lower)) {
       // It's a known severity
       severity = lower;
     } else {
@@ -207,7 +216,7 @@ function parseParams(raw: string, severities: string[], defaultSeverity: string)
     }
   }
 
-  return { scope, subscope, fullScope, severity, ticket, warning };
+  return { id, scope, subscope, fullScope, severity, ticket, warning };
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +265,9 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
   const rules: Rule[] = [];
   const warnings: RuleWarning[] = [];
   const removals: RuleRemoval[] = [];
+  const idPrefix = config.idPrefix || "RUL";
+  const escapedIdPrefix = idPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const idPatternRegex = new RegExp(`^${escapedIdPrefix}-\\d+$`, "i");
   const escapedTag = config.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const removalRegex = new RegExp(
     String.raw`@${escapedTag}-removed\(([^,)]+),\s*([^)]+)\)\s*:?\s*(.+?)(?:\s*\*\/)?$`,
@@ -312,7 +324,7 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
       const match = regex.exec(lines[i]);
       if (!match) continue;
 
-      const parsed = parseParams(match[1], severities, defaultSeverity);
+      const parsed = parseParams(match[1], severities, defaultSeverity, idPrefix);
 
       // Warn on parse issues
       if (parsed.warning) {
@@ -351,6 +363,7 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
       }
 
       rules.push({
+        id: parsed.id,
         scope: parsed.scope,
         subscope: parsed.subscope,
         fullScope: parsed.fullScope,
@@ -362,6 +375,49 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
         codeContext,
         ...meta,
       });
+    }
+  }
+
+  // Warn on missing required IDs
+  if (config.idRequired) {
+    for (const rule of rules) {
+      if (!rule.id) {
+        warnings.push({ file: rule.file, line: rule.line, message: "missing required rule ID" });
+      }
+    }
+  }
+
+  // Warn on duplicate IDs
+  const seenIds = new Map<string, { file: string; line: number }>();
+  for (const rule of rules) {
+    if (!rule.id) continue;
+    const prev = seenIds.get(rule.id);
+    if (prev) {
+      warnings.push({
+        file: rule.file,
+        line: rule.line,
+        message: `duplicate rule ID "${rule.id}" (first seen at ${prev.file}:${prev.line})`,
+      });
+    } else {
+      seenIds.set(rule.id, { file: rule.file, line: rule.line });
+    }
+  }
+
+  // Warn on references to unknown rule IDs (dependsOn, conflictsWith, supersededBy)
+  const allIds = new Set(rules.filter(r => r.id).map(r => r.id));
+  for (const rule of rules) {
+    for (const dep of rule.dependsOn) {
+      if (!allIds.has(dep)) {
+        warnings.push({ file: rule.file, line: rule.line, message: `dependsOn references unknown rule ID "${dep}"` });
+      }
+    }
+    for (const conf of rule.conflictsWith) {
+      if (!allIds.has(conf)) {
+        warnings.push({ file: rule.file, line: rule.line, message: `conflictsWith references unknown rule ID "${conf}"` });
+      }
+    }
+    if (rule.supersededBy && !allIds.has(rule.supersededBy)) {
+      warnings.push({ file: rule.file, line: rule.line, message: `supersededBy references unknown rule ID "${rule.supersededBy}"` });
     }
   }
 

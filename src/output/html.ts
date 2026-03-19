@@ -43,11 +43,15 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
       if (sub !== "_general") rulesChunks.push(`<h3>${esc(capitalize(sub))}</h3>`);
 
       for (const r of tree[s][sub]) {
-        rulesChunks.push(`<div class="rule" data-severity="${r.severity}" data-scope="${esc(r.fullScope)}">`);
+        const ruleId = r.id ? ` id="rule-${esc(r.id)}"` : "";
+        rulesChunks.push(`<div class="rule" data-severity="${r.severity}" data-scope="${esc(r.fullScope)}"${ruleId}>`);
         rulesChunks.push(`<div class="rule-header">`);
         rulesChunks.push(
           `<span class="sev-dot" style="background:${sevColor(r.severity)}" title="${sevLabel(r.severity)}"></span>`,
         );
+        if (r.id) {
+          rulesChunks.push(`<a href="#rule-${esc(r.id)}" class="rule-id">${esc(r.id)}</a> `);
+        }
         if (r.severity !== "info") {
           rulesChunks.push(`<span class="sev-tag" style="color:${sevColor(r.severity)}">[${r.severity}]</span> `);
         }
@@ -101,7 +105,8 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
     historicalChunks.push(`<div class="historical-section"><h2>Historical Rules (${historical.length})</h2>`);
     for (const r of historical) {
       const tag = r.supersededBy ? `SUPERSEDED by ${r.supersededBy}` : r.status === "removed" ? "REMOVED" : "DEPRECATED";
-      historicalChunks.push(`<div class="historical-rule"><span class="rule-desc"><s>${esc(r.description)}</s></span> <span class="rule-tag">${esc(tag)}</span>`);
+      const histRuleId = r.id ? ` id="rule-${esc(r.id)}"` : "";
+      historicalChunks.push(`<div class="historical-rule"${histRuleId}>${r.id ? `<a href="#rule-${esc(r.id)}" class="rule-id">${esc(r.id)}</a> ` : ""}<span class="rule-desc"><s>${esc(r.description)}</s></span> <span class="rule-tag">${esc(tag)}</span>`);
       historicalChunks.push(`<div class="rule-meta">📍 <code>${esc(r.file)}:${r.line}</code></div></div>`);
     }
     historicalChunks.push(`</div>`);
