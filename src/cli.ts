@@ -174,6 +174,11 @@ function printDiff(log: ReturnType<typeof createLogger>, diff: RuleDiff) {
   for (const r of diff.removed) {
     log.log(`  ${c.red}-${c.reset} ${fmtId(r.id)}${r.description} ${c.dim}${r.fullScope} → ${r.file}:${r.line}${c.reset}`);
   }
+  for (const { prev, next } of diff.modified) {
+    log.log(
+      `  ${c.yellow}~${c.reset} ${fmtId(next.id)}${next.description} ${sevIcon(next.severity)}[${next.severity}]${c.reset} ${c.dim}${next.fullScope} → ${next.file}:${next.line}${c.reset}`,
+    );
+  }
 }
 
 function printWarnings(log: ReturnType<typeof createLogger>, warnings: RuleWarning[]) {
@@ -301,7 +306,7 @@ async function main() {
   const paths = deriveOutputPaths(config.output);
   const prev = loadPreviousRules(paths.json);
   const diff = computeDiff(prev, rules);
-  const hasChanges = diff.added.length > 0 || diff.removed.length > 0;
+  const hasChanges = diff.added.length > 0 || diff.removed.length > 0 || diff.modified.length > 0;
 
   if (prev.length > 0 && hasChanges) {
     printDiff(log, diff);

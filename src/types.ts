@@ -64,6 +64,7 @@ export interface ScopeTree {
 export interface RuleDiff {
   added: Rule[];
   removed: Rule[];
+  modified: Array<{ prev: Rule; next: Rule }>;
 }
 
 // ---------------------------------------------------------------------------

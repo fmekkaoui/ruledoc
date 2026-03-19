@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { appendHistory, computeDiff, loadHistory, loadPreviousRules } from "./diff.js";
+import { appendHistory, computeDiff, contentFingerprint, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
 import type { Rule } from "./types.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
@@ -68,7 +68,7 @@ describe("loadPreviousRules", () => {
 
 describe("computeDiff", () => {
   it("returns empty diff for empty arrays", () => {
-    expect(computeDiff([], [])).toEqual({ added: [], removed: [] });
+    expect(computeDiff([], [])).toEqual({ added: [], removed: [], modified: [] });
   });
 
   it("detects added rules", () => {
@@ -103,6 +103,68 @@ describe("computeDiff", () => {
     expect(diff.added[0].description).toBe("added");
     expect(diff.removed).toHaveLength(1);
     expect(diff.removed[0].description).toBe("removed");
+  });
+
+  it("detects modification when rule with same ID changes", () => {
+    const prev = makeRule({ id: "RUL-001", description: "old text", severity: "info" });
+    const next = makeRule({ id: "RUL-001", description: "new text", severity: "warning" });
+    const diff = computeDiff([prev], [next]);
+    expect(diff.modified).toHaveLength(1);
+    expect(diff.modified[0].prev.description).toBe("old text");
+    expect(diff.modified[0].next.description).toBe("new text");
+    expect(diff.added).toHaveLength(0);
+    expect(diff.removed).toHaveLength(0);
+  });
+
+  it("does not report modification when rule with same ID is unchanged", () => {
+    const rule = makeRule({ id: "RUL-001", description: "same" });
+    const diff = computeDiff([rule], [rule]);
+    expect(diff.modified).toHaveLength(0);
+    expect(diff.added).toHaveLength(0);
+    expect(diff.removed).toHaveLength(0);
+  });
+
+  it("detects modification on rich meta change", () => {
+    const prev = makeRule({ id: "RUL-001", description: "desc", owner: "alice" });
+    const next = makeRule({ id: "RUL-001", description: "desc", owner: "bob" });
+    const diff = computeDiff([prev], [next]);
+    expect(diff.modified).toHaveLength(1);
+  });
+
+  it("detects modification on tags change", () => {
+    const prev = makeRule({ id: "RUL-001", description: "desc", tags: ["a"] });
+    const next = makeRule({ id: "RUL-001", description: "desc", tags: ["a", "b"] });
+    const diff = computeDiff([prev], [next]);
+    expect(diff.modified).toHaveLength(1);
+  });
+
+  it("does not report modification for informational-only fields (examples)", () => {
+    const prev = makeRule({ id: "RUL-001", description: "desc", examples: ["ex1"] });
+    const next = makeRule({ id: "RUL-001", description: "desc", examples: ["ex2"] });
+    const diff = computeDiff([prev], [next]);
+    expect(diff.modified).toHaveLength(0);
+  });
+
+  it("falls back to content fingerprint when no ID", () => {
+    const prev = makeRule({ description: "no id rule" });
+    const next = makeRule({ description: "no id rule changed" });
+    const diff = computeDiff([prev], [next]);
+    // Without IDs, these are seen as add + remove, not modification
+    expect(diff.modified).toHaveLength(0);
+    expect(diff.added).toHaveLength(1);
+    expect(diff.removed).toHaveLength(1);
+  });
+});
+
+describe("fingerprint", () => {
+  it("uses ID when present", () => {
+    const rule = makeRule({ id: "RUL-001" });
+    expect(fingerprint(rule)).toBe("id:RUL-001");
+  });
+
+  it("uses content when no ID", () => {
+    const rule = makeRule({ id: "", description: "test" });
+    expect(fingerprint(rule)).toBe(contentFingerprint(rule));
   });
 });
 

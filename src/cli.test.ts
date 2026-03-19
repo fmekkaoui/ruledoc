@@ -687,6 +687,29 @@ describe("cli", () => {
     });
   });
 
+  describe("modified rules", () => {
+    it("shows modified rules when rule with same ID changes", async () => {
+      const srcDir = join(tmpDir, "src");
+      mkdirSync(srcDir, { recursive: true });
+
+      // First run with a rule that has an ID
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing, RUL-001): Old description\nconst x = 1;\n");
+      process.chdir(tmpDir);
+      const outMd = join(tmpDir, "BUSINESS_RULES.md");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+      exitCode = undefined;
+      logs = [];
+
+      // Change the description but keep the same ID
+      writeFileSync(join(srcDir, "billing.ts"), "// @rule(billing, RUL-001, warning): New description\nconst x = 1;\n");
+      await runCLI(["--src", srcDir, "--output", outMd, "--format", "md,json"]);
+
+      const output = logs.join("\n");
+      expect(output).toContain("~");
+      expect(output).toContain("New description");
+    });
+  });
+
   describe("no diff printed when no previous rules exist", () => {
     it("does not print diff on first run", async () => {
       const srcDir = join(tmpDir, "src");
