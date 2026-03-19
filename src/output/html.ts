@@ -1,4 +1,4 @@
-import { buildTree, capitalize } from "../tree.js";
+import { buildTree, capitalize, splitByLifecycle } from "../tree.js";
 import type { Rule, RuleWarning } from "../types.js";
 import { DEFAULT_SEVERITY_DISPLAY, SEVERITY_DISPLAY } from "../types.js";
 
@@ -20,10 +20,11 @@ function sevLabel(s: string): string {
 }
 
 export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
-  const tree = buildTree(rules);
+  const { active, historical } = splitByLifecycle(rules);
+  const tree = buildTree(active);
   const scopes = Object.keys(tree).sort();
-  const totalCritical = rules.filter((r) => r.severity === "critical").length;
-  const totalWarning = rules.filter((r) => r.severity === "warning").length;
+  const totalCritical = active.filter((r) => r.severity === "critical").length;
+  const totalWarning = active.filter((r) => r.severity === "warning").length;
   const date = new Date().toISOString().split("T")[0];
 
   // Build rules HTML
@@ -53,6 +54,24 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
         rulesChunks.push(`<span class="rule-desc">${esc(r.description)}</span>`);
         if (r.ticket) rulesChunks.push(` <code class="ticket">${esc(r.ticket)}</code>`);
         rulesChunks.push(`</div>`);
+        if (r.title) rulesChunks.push(`<div class="rule-title">${esc(r.title)}</div>`);
+        if (r.rationale) rulesChunks.push(`<div class="rule-rationale">${esc(r.rationale)}</div>`);
+        const metaParts: string[] = [];
+        if (r.owner) metaParts.push(`Owner: ${esc(r.owner)}`);
+        if (r.since) metaParts.push(`Since: ${esc(r.since)}`);
+        if (r.status) metaParts.push(`Status: ${esc(r.status)}`);
+        if (metaParts.length > 0) rulesChunks.push(`<div class="rule-meta-rich">${metaParts.join(" · ")}</div>`);
+        if (r.tags.length > 0) {
+          rulesChunks.push(`<div class="rule-tags">${r.tags.map(t => `<span class="rule-tag">${esc(t)}</span>`).join(" ")}</div>`);
+        }
+        if (r.supersededBy) rulesChunks.push(`<div class="rule-relation">Superseded by: <code>${esc(r.supersededBy)}</code></div>`);
+        if (r.dependsOn.length > 0) rulesChunks.push(`<div class="rule-relation">Depends on: ${r.dependsOn.map(d => `<code>${esc(d)}</code>`).join(", ")}</div>`);
+        if (r.conflictsWith.length > 0) rulesChunks.push(`<div class="rule-relation">Conflicts with: ${r.conflictsWith.map(c => `<code>${esc(c)}</code>`).join(", ")}</div>`);
+        if (r.examples.length > 0) {
+          rulesChunks.push(`<div class="rule-example">${r.examples.map(ex => `<div>${esc(ex)}</div>`).join("")}</div>`);
+        }
+        if (r.testCases.length > 0) rulesChunks.push(`<div class="rule-tests">Tests: ${r.testCases.map(t => `<code>${esc(t)}</code>`).join(", ")}</div>`);
+        if (r.links.length > 0) rulesChunks.push(`<div class="rule-links">Links: ${r.links.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join(", ")}</div>`);
         rulesChunks.push(`<div class="rule-meta">📍 <code>${esc(r.file)}:${r.line}</code></div>`);
         if (r.codeContext) {
           rulesChunks.push(`<div class="rule-code"><code>${esc(r.codeContext)}</code></div>`);
@@ -76,7 +95,20 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
   const warningsHTML = warningsChunks.join("");
 
   // Scope filter buttons
-  const filterChunks: string[] = [`<button class="filter-btn active" data-filter="all">All (${rules.length})</button>`];
+  // Historical Rules HTML
+  const historicalChunks: string[] = [];
+  if (historical.length > 0) {
+    historicalChunks.push(`<div class="historical-section"><h2>Historical Rules (${historical.length})</h2>`);
+    for (const r of historical) {
+      const tag = r.supersededBy ? `SUPERSEDED by ${r.supersededBy}` : r.status === "removed" ? "REMOVED" : "DEPRECATED";
+      historicalChunks.push(`<div class="historical-rule"><span class="rule-desc"><s>${esc(r.description)}</s></span> <span class="rule-tag">${esc(tag)}</span>`);
+      historicalChunks.push(`<div class="rule-meta">📍 <code>${esc(r.file)}:${r.line}</code></div></div>`);
+    }
+    historicalChunks.push(`</div>`);
+  }
+  const historicalHTML = historicalChunks.join("");
+
+  const filterChunks: string[] = [`<button class="filter-btn active" data-filter="all">All (${active.length})</button>`];
   for (const s of scopes) {
     const cnt = Object.keys(tree[s]).reduce((n, sub) => n + tree[s][sub].length, 0);
     filterChunks.push(`<button class="filter-btn" data-filter="${esc(s)}">${esc(capitalize(s))} (${cnt})</button>`);
@@ -126,6 +158,24 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
   .rule-meta code { color: #94a3b8; }
   .rule-code { margin-top: 0.35rem; }
   .rule-code code { font-size: 0.78rem; color: #a5b4fc; }
+  .rule-title { font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-top: 0.3rem; }
+  .rule-rationale { font-size: 0.8rem; font-style: italic; color: #94a3b8; margin-top: 0.2rem; }
+  .rule-meta-rich { font-size: 0.78rem; color: #64748b; margin-top: 0.25rem; }
+  .rule-tag { font-size: 0.7rem; background: #334155; padding: 0.1rem 0.4rem; border-radius: 4px; color: #94a3b8; margin-right: 0.25rem; }
+  .rule-tags { margin-top: 0.25rem; }
+  .rule-relation { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+  .rule-relation code { color: #94a3b8; }
+  .rule-example { font-size: 0.78rem; color: #94a3b8; margin-top: 0.25rem; padding: 0.3rem 0.5rem; background: #0f172a; border-radius: 4px; }
+  .rule-tests { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+  .rule-tests code { color: #94a3b8; }
+  .rule-links { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+  .rule-links a { color: #3b82f6; text-decoration: none; }
+  .rule-links a:hover { text-decoration: underline; }
+  .historical-section { margin-top: 2rem; padding: 1rem; background: #1c1917; border: 1px solid #44403c; border-radius: 8px; }
+  .historical-section h2 { font-size: 1rem; color: #a8a29e; border: none; padding: 0; margin-bottom: 0.5rem; }
+  .historical-rule { padding: 0.5rem 0; border-bottom: 1px solid #292524; }
+  .historical-rule:last-child { border-bottom: none; }
+  .rule-id { font-size: 0.7rem; background: #1e293b; padding: 0.1rem 0.4rem; border-radius: 4px; color: #64748b; }
   .hidden { display: none !important; }
   .no-results { text-align: center; color: #64748b; padding: 3rem 0; }
   .warnings-section { margin-top: 2rem; padding: 1rem; background: #1c1917; border: 1px solid #78350f; border-radius: 8px; }
@@ -140,7 +190,7 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
   <p class="subtitle">Auto-generated by ruledoc — ${date}</p>
 
   <div class="stats">
-    <div class="stat"><strong>${rules.length}</strong>rules</div>
+    <div class="stat"><strong>${active.length}</strong>rules</div>
     <div class="stat"><strong>${scopes.length}</strong>scopes</div>
     ${totalCritical ? `<div class="stat" style="border-left:3px solid #ef4444"><strong>${totalCritical}</strong>critical</div>` : ""}
     ${totalWarning ? `<div class="stat" style="border-left:3px solid #eab308"><strong>${totalWarning}</strong>warning</div>` : ""}
@@ -152,15 +202,17 @@ export function generateHTML(rules: Rule[], warnings: RuleWarning[]): string {
     <button class="sev-btn active" data-sev="all">All severities</button>
     <button class="sev-btn" data-sev="critical" style="color:#ef4444">Critical (${totalCritical})</button>
     <button class="sev-btn" data-sev="warning" style="color:#eab308">Warning (${totalWarning})</button>
-    <button class="sev-btn" data-sev="info" style="color:#3b82f6">Info (${rules.length - totalCritical - totalWarning})</button>
+    <button class="sev-btn" data-sev="info" style="color:#3b82f6">Info (${active.length - totalCritical - totalWarning})</button>
   </div>
 
   <div id="rules">${rulesHTML}</div>
   <div class="no-results hidden" id="noResults">No rules match your search.</div>
 
+  ${historicalHTML}
+
   ${warningsHTML}
 
-  <footer>Generated by <strong>ruledoc</strong> · ${rules.length} rules · ${date}</footer>
+  <footer>Generated by <strong>ruledoc</strong> · ${active.length} rules · ${date}</footer>
 
 <script>
 (function() {

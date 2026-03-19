@@ -3,11 +3,125 @@ import { join, relative, resolve } from "node:path";
 import { loadGitignore } from "./gitignore.js";
 import { globToRegex, matchesAnyGlob } from "./glob.js";
 import type { Rule, RuledocConfig, RuleRemoval, RuleWarning } from "./types.js";
-import { buildPattern, RULEDOC_DEFAULT_IGNORE } from "./types.js";
+import { buildPattern, RULEDOC_DEFAULT_IGNORE, VALID_STATUSES } from "./types.js";
 import { walkFiles } from "./walker.js";
 
 // Pre-compiled regexes for default test file patterns (avoids re-compilation per call)
 const RULEDOC_DEFAULT_REGEXES = RULEDOC_DEFAULT_IGNORE.map(globToRegex);
+
+// Recognized continuation-line meta keys
+const META_KEYS = new Set([
+  "title", "rationale", "owner", "status", "since",
+  "tags", "links", "supersededBy", "dependsOn", "conflictsWith",
+  "examples", "testCases",
+]);
+
+// Keys whose values are CSV-split into arrays
+const ARRAY_META_KEYS = new Set(["tags", "links", "dependsOn", "conflictsWith", "testCases"]);
+
+// Keys that accumulate across multiple lines
+const MULTI_LINE_META_KEYS = new Set(["examples"]);
+
+// Regex to match a continuation meta line after stripping the comment prefix
+const META_LINE_RE = /^@(\w+)\s*:\s*(.+)$/;
+
+/**
+ * Strip the leading comment prefix from a line.
+ * Returns the trimmed content after the prefix, or null if the line is not a comment.
+ */
+function stripCommentPrefix(line: string): string | null {
+  const trimmed = line.trim();
+  // // comment
+  if (trimmed.startsWith("//")) return trimmed.slice(2).trim();
+  // * continuation inside block comment (/** ... */)
+  if (trimmed.startsWith("*") && !trimmed.startsWith("*/")) return trimmed.slice(1).trim();
+  // # comment
+  if (trimmed.startsWith("#")) return trimmed.slice(1).trim();
+  return null;
+}
+
+interface MetaFields {
+  title: string;
+  rationale: string;
+  owner: string;
+  status: string;
+  since: string;
+  tags: string[];
+  links: string[];
+  supersededBy: string;
+  dependsOn: string[];
+  conflictsWith: string[];
+  examples: string[];
+  testCases: string[];
+}
+
+function emptyMeta(): MetaFields {
+  return {
+    title: "", rationale: "", owner: "", status: "", since: "",
+    tags: [], links: [], supersededBy: "",
+    dependsOn: [], conflictsWith: [], examples: [], testCases: [],
+  };
+}
+
+function csvSplit(value: string): string[] {
+  return value.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Scan continuation lines starting at `startLine` and extract meta fields.
+ * Returns the meta fields and the index of the first line AFTER the meta block.
+ */
+function parseContinuationLines(
+  lines: string[],
+  startLine: number,
+  warnings: RuleWarning[],
+  relFile: string,
+): { meta: MetaFields; nextLine: number } {
+  const meta = emptyMeta();
+  let j = startLine;
+
+  for (; j < lines.length; j++) {
+    const content = stripCommentPrefix(lines[j]);
+    // Stop on non-comment or empty comment content
+    if (content === null || content === "") break;
+
+    const m = META_LINE_RE.exec(content);
+    if (!m) break;
+
+    const key = m[1];
+    const value = m[2].trim();
+
+    if (!META_KEYS.has(key)) break; // unknown key → end of meta block
+
+    if (ARRAY_META_KEYS.has(key)) {
+      (meta as any)[key] = csvSplit(value);
+    } else if (MULTI_LINE_META_KEYS.has(key)) {
+      (meta as any)[key].push(value);
+    } else {
+      (meta as any)[key] = value;
+    }
+  }
+
+  // Validate status
+  if (meta.status && !(VALID_STATUSES as readonly string[]).includes(meta.status)) {
+    warnings.push({
+      file: relFile,
+      line: startLine + 1, // 1-based approximate
+      message: `unknown status "${meta.status}", expected one of: ${VALID_STATUSES.join(", ")}`,
+    });
+  }
+
+  // Validate since date format
+  if (meta.since && !/^\d{4}-\d{2}-\d{2}$/.test(meta.since)) {
+    warnings.push({
+      file: relFile,
+      line: startLine + 1,
+      message: `malformed since date "${meta.since}", expected YYYY-MM-DD`,
+    });
+  }
+
+  return { meta, nextLine: j };
+}
 
 // ---------------------------------------------------------------------------
 // Levenshtein distance for "did you mean?" suggestions
@@ -217,9 +331,12 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
         continue; // Skip rules with no description
       }
 
-      // Grab next non-comment, non-empty line as code context
+      // Parse continuation meta lines
+      const { meta, nextLine } = parseContinuationLines(lines, i + 1, warnings, relFile);
+
+      // Grab next non-comment, non-empty line as code context (starting after meta block)
       let codeContext = "";
-      for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+      for (let j = nextLine; j < Math.min(nextLine + 5, lines.length); j++) {
         const trimmed = lines[j].trim();
         if (
           trimmed &&
@@ -243,6 +360,7 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
         file: relFile,
         line: i + 1,
         codeContext,
+        ...meta,
       });
     }
   }

@@ -10,13 +10,17 @@ export type { ExtractionResult } from "./parser.js";
 export { extractRules } from "./parser.js";
 export type { ProtectionResult } from "./protect.js";
 export { checkProtection } from "./protect.js";
-export { buildTree } from "./tree.js";
+export { buildTree, splitByLifecycle } from "./tree.js";
 export type { HistoryEntry, Rule, RuleDiff, RuledocConfig, RuleRemoval, RuleWarning, ScopeTree } from "./types.js";
 export {
+  ACTIVE_STATUSES,
   buildPattern,
   DEFAULT_CONFIG,
   DEFAULT_SEVERITIES,
   DEFAULT_SEVERITY_DISPLAY,
+  HISTORICAL_STATUSES,
+  isHistoricalRule,
   RULEDOC_DEFAULT_IGNORE,
   SEVERITY_DISPLAY,
+  VALID_STATUSES,
 } from "./types.js";

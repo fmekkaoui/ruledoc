@@ -16,6 +16,18 @@ function makeRule(overrides: Partial<Rule> = {}): Rule {
     file: "test.ts",
     line: 1,
     codeContext: "",
+    title: "",
+    rationale: "",
+    owner: "",
+    status: "",
+    since: "",
+    tags: [],
+    links: [],
+    supersededBy: "",
+    dependsOn: [],
+    conflictsWith: [],
+    examples: [],
+    testCases: [],
     ...overrides,
   };
 }

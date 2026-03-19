@@ -382,6 +382,190 @@ describe("extractRules", () => {
     expect(result.rules).toHaveLength(2);
   });
 
+  it("parses continuation meta lines for title, rationale, owner, status, since", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing, critical): Plan limit applies",
+        "// @title: Plan Limit",
+        "// @rationale: Prevents abuse of free tier",
+        "// @owner: billing-team",
+        "// @status: active",
+        "// @since: 2025-06-01",
+        "const LIMIT = 50;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.rules).toHaveLength(1);
+    const r = result.rules[0];
+    expect(r.title).toBe("Plan Limit");
+    expect(r.rationale).toBe("Prevents abuse of free tier");
+    expect(r.owner).toBe("billing-team");
+    expect(r.status).toBe("active");
+    expect(r.since).toBe("2025-06-01");
+    expect(r.codeContext).toBe("const LIMIT = 50;");
+  });
+
+  it("parses continuation meta lines for tags, links, dependsOn, conflictsWith", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Plan limit",
+        "// @tags: billing, plans, limits",
+        "// @links: https://docs.example.com/plans, https://wiki.example.com",
+        "// @dependsOn: auth-rule-1, billing-rule-2",
+        "// @conflictsWith: legacy-rule",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.tags).toEqual(["billing", "plans", "limits"]);
+    expect(r.links).toEqual(["https://docs.example.com/plans", "https://wiki.example.com"]);
+    expect(r.dependsOn).toEqual(["auth-rule-1", "billing-rule-2"]);
+    expect(r.conflictsWith).toEqual(["legacy-rule"]);
+  });
+
+  it("parses supersededBy and testCases meta lines", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Old plan rule",
+        "// @supersededBy: new-plan-rule",
+        "// @testCases: test/billing.test.ts, test/plans.test.ts",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.supersededBy).toBe("new-plan-rule");
+    expect(r.testCases).toEqual(["test/billing.test.ts", "test/plans.test.ts"]);
+  });
+
+  it("accumulates multiple examples lines", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Plan limit",
+        "// @examples: Free plan allows 50 items",
+        "// @examples: Pro plan allows 1000 items",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.examples).toEqual(["Free plan allows 50 items", "Pro plan allows 1000 items"]);
+  });
+
+  it("warns on unknown status", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Test rule",
+        "// @status: invalid-status",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const statusWarning = result.warnings.find((w) => w.message.includes('unknown status'));
+    expect(statusWarning).toBeDefined();
+    expect(statusWarning?.message).toContain("invalid-status");
+  });
+
+  it("warns on malformed since date", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Test rule",
+        "// @since: June 2025",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const dateWarning = result.warnings.find((w) => w.message.includes('malformed since date'));
+    expect(dateWarning).toBeDefined();
+    expect(dateWarning?.message).toContain("June 2025");
+  });
+
+  it("stops parsing meta on non-meta comment line", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "// @rule(billing): Test rule",
+        "// @title: My Title",
+        "// This is a regular comment",
+        "// @owner: should-not-be-parsed",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.title).toBe("My Title");
+    expect(r.owner).toBe("");
+  });
+
+  it("parses meta from hash comments", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.py"),
+      [
+        "# @rule(data): Python rule",
+        "# @title: Data Rule",
+        "# @owner: data-team",
+        "data = []",
+      ].join("\n"),
+    );
+    const config = makeConfig(dir, { extensions: [".py"] });
+    const result = extractRules(config);
+    const r = result.rules[0];
+    expect(r.title).toBe("Data Rule");
+    expect(r.owner).toBe("data-team");
+  });
+
+  it("parses meta from block comment continuations", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      [
+        "/** @rule(billing): Block rule",
+        " * @title: Block Title",
+        " * @owner: block-team",
+        " */",
+        "const x = 1;",
+      ].join("\n"),
+    );
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.title).toBe("Block Title");
+    expect(r.owner).toBe("block-team");
+  });
+
+  it("defaults new meta fields to empty values when no continuation lines", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "test.ts"), `// @rule(billing): Simple rule\nconst x = 1;\n`);
+    const result = extractRules(makeConfig(dir));
+    const r = result.rules[0];
+    expect(r.title).toBe("");
+    expect(r.rationale).toBe("");
+    expect(r.owner).toBe("");
+    expect(r.status).toBe("");
+    expect(r.since).toBe("");
+    expect(r.tags).toEqual([]);
+    expect(r.links).toEqual([]);
+    expect(r.supersededBy).toBe("");
+    expect(r.dependsOn).toEqual([]);
+    expect(r.conflictsWith).toEqual([]);
+    expect(r.examples).toEqual([]);
+    expect(r.testCases).toEqual([]);
+  });
+
   it("normalizes severity case to lowercase", () => {
     const dir = tmp();
     writeFileSync(join(dir, "test.ts"), `// @rule(billing, CRITICAL): Uppercase severity\nfunction pay() {}\n`);

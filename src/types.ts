@@ -21,6 +21,30 @@ export interface Rule {
   line: number;
   /** First meaningful line of code after the annotation */
   codeContext: string;
+  /** Short display title */
+  title: string;
+  /** Why this rule exists */
+  rationale: string;
+  /** Team or person responsible */
+  owner: string;
+  /** Lifecycle status: "draft" | "proposed" | "approved" | "active" | "deprecated" | "removed" | "" */
+  status: string;
+  /** ISO date when the rule was introduced, e.g. "2025-06-01" */
+  since: string;
+  /** Categorization tags */
+  tags: string[];
+  /** Related URLs */
+  links: string[];
+  /** Rule ID that supersedes this one */
+  supersededBy: string;
+  /** Rule IDs this rule depends on */
+  dependsOn: string[];
+  /** Rule IDs that conflict with this one */
+  conflictsWith: string[];
+  /** Usage examples */
+  examples: string[];
+  /** Paths to related test files */
+  testCases: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +190,15 @@ export const SEVERITY_DISPLAY: Record<string, { emoji: string; color: string; la
 export const DEFAULT_SEVERITY_DISPLAY = { emoji: "\u26AA", color: "#9ca3af", label: "" };
 
 export const DEFAULT_SEVERITIES = ["info", "warning", "critical"];
+
+export const VALID_STATUSES = ["draft", "proposed", "approved", "active", "deprecated", "removed"] as const;
+
+export const ACTIVE_STATUSES = new Set(["draft", "proposed", "approved", "active", ""]);
+export const HISTORICAL_STATUSES = new Set(["deprecated", "removed"]);
+
+export function isHistoricalRule(rule: Rule): boolean {
+  return HISTORICAL_STATUSES.has(rule.status) || !!rule.supersededBy;
+}
 
 export const DEFAULT_CONFIG: RuledocConfig = {
   src: "./src",

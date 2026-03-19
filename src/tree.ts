@@ -1,5 +1,5 @@
 import type { Rule, ScopeTree } from "./types.js";
-import { DEFAULT_SEVERITY_DISPLAY, SEVERITY_DISPLAY } from "./types.js";
+import { DEFAULT_SEVERITY_DISPLAY, isHistoricalRule, SEVERITY_DISPLAY } from "./types.js";
 
 export function buildTree(rules: Rule[]): ScopeTree {
   const tree: ScopeTree = {};
@@ -17,4 +17,17 @@ export function capitalize(s: string): string {
 
 export function sevBadge(s: string): string {
   return SEVERITY_DISPLAY[s]?.emoji ?? DEFAULT_SEVERITY_DISPLAY.emoji;
+}
+
+export function splitByLifecycle(rules: Rule[]): { active: Rule[]; historical: Rule[] } {
+  const active: Rule[] = [];
+  const historical: Rule[] = [];
+  for (const r of rules) {
+    if (isHistoricalRule(r)) {
+      historical.push(r);
+    } else {
+      active.push(r);
+    }
+  }
+  return { active, historical };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, capitalize, sevBadge } from "./tree.js";
+import { buildTree, capitalize, sevBadge, splitByLifecycle } from "./tree.js";
 import type { Rule } from "./types.js";
 
 function makeRule(overrides: Partial<Rule> = {}): Rule {
@@ -13,6 +13,18 @@ function makeRule(overrides: Partial<Rule> = {}): Rule {
     file: "test.ts",
     line: 1,
     codeContext: "",
+    title: "",
+    rationale: "",
+    owner: "",
+    status: "",
+    since: "",
+    tags: [],
+    links: [],
+    supersededBy: "",
+    dependsOn: [],
+    conflictsWith: [],
+    examples: [],
+    testCases: [],
     ...overrides,
   };
 }
@@ -65,6 +77,58 @@ describe("capitalize", () => {
 
   it('returns "A" for "a"', () => {
     expect(capitalize("a")).toBe("A");
+  });
+});
+
+describe("splitByLifecycle", () => {
+  it("returns empty arrays for empty input", () => {
+    const { active, historical } = splitByLifecycle([]);
+    expect(active).toEqual([]);
+    expect(historical).toEqual([]);
+  });
+
+  it("puts active/draft/proposed/approved rules in active", () => {
+    const rules = [
+      makeRule({ status: "active", description: "a" }),
+      makeRule({ status: "draft", description: "d" }),
+      makeRule({ status: "proposed", description: "p" }),
+      makeRule({ status: "approved", description: "ap" }),
+      makeRule({ status: "", description: "empty" }),
+    ];
+    const { active, historical } = splitByLifecycle(rules);
+    expect(active).toHaveLength(5);
+    expect(historical).toHaveLength(0);
+  });
+
+  it("puts deprecated and removed rules in historical", () => {
+    const rules = [
+      makeRule({ status: "deprecated", description: "dep" }),
+      makeRule({ status: "removed", description: "rem" }),
+    ];
+    const { active, historical } = splitByLifecycle(rules);
+    expect(active).toHaveLength(0);
+    expect(historical).toHaveLength(2);
+  });
+
+  it("puts supersededBy rules in historical regardless of status", () => {
+    const rules = [
+      makeRule({ status: "active", supersededBy: "other", description: "sup" }),
+    ];
+    const { active, historical } = splitByLifecycle(rules);
+    expect(active).toHaveLength(0);
+    expect(historical).toHaveLength(1);
+  });
+
+  it("splits mixed rules correctly", () => {
+    const rules = [
+      makeRule({ status: "active", description: "a1" }),
+      makeRule({ status: "deprecated", description: "d1" }),
+      makeRule({ status: "", description: "empty" }),
+      makeRule({ supersededBy: "x", description: "s1" }),
+    ];
+    const { active, historical } = splitByLifecycle(rules);
+    expect(active).toHaveLength(2);
+    expect(historical).toHaveLength(2);
   });
 });
 

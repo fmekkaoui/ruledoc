@@ -13,6 +13,18 @@ function makeRule(overrides: Partial<Rule> = {}): Rule {
     file: "test.ts",
     line: 1,
     codeContext: "",
+    title: "",
+    rationale: "",
+    owner: "",
+    status: "",
+    since: "",
+    tags: [],
+    links: [],
+    supersededBy: "",
+    dependsOn: [],
+    conflictsWith: [],
+    examples: [],
+    testCases: [],
     ...overrides,
   };
 }
@@ -266,6 +278,64 @@ describe("generateHTML", () => {
     const rules = [makeRule({ scope: 'a"b', fullScope: 'a"b' })];
     const html = generateHTML(rules, []);
     expect(html).toContain('data-scope="a&quot;b"');
+  });
+
+  it("shows title when present", () => {
+    const rules = [makeRule({ title: "Plan Limit" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("rule-title");
+    expect(html).toContain("Plan Limit");
+  });
+
+  it("shows rationale when present", () => {
+    const rules = [makeRule({ rationale: "Prevents abuse" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("rule-rationale");
+    expect(html).toContain("Prevents abuse");
+  });
+
+  it("shows owner in rich meta when present", () => {
+    const rules = [makeRule({ owner: "billing-team" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("rule-meta-rich");
+    expect(html).toContain("Owner: billing-team");
+  });
+
+  it("shows tags when present", () => {
+    const rules = [makeRule({ tags: ["billing", "plans"] })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("rule-tag");
+    expect(html).toContain("billing");
+    expect(html).toContain("plans");
+  });
+
+  it("shows historical section for deprecated rules", () => {
+    const rules = [
+      makeRule({ status: "deprecated", description: "old way" }),
+      makeRule({ status: "", description: "active rule", scope: "auth", fullScope: "auth" }),
+    ];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("historical-section");
+    expect(html).toContain("old way");
+    expect(html).toContain("DEPRECATED");
+  });
+
+  it("shows REMOVED tag in historical section", () => {
+    const rules = [makeRule({ status: "removed", description: "gone rule" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("REMOVED");
+  });
+
+  it("shows SUPERSEDED tag in historical section", () => {
+    const rules = [makeRule({ supersededBy: "new-rule", description: "old rule" })];
+    const html = generateHTML(rules, []);
+    expect(html).toContain("SUPERSEDED by new-rule");
+  });
+
+  it("does not show historical section div when no historical rules", () => {
+    const rules = [makeRule({ status: "" })];
+    const html = generateHTML(rules, []);
+    expect(html).not.toContain('<div class="historical-section">');
   });
 
   it("has no critical badge on scope heading when no critical rules", () => {
