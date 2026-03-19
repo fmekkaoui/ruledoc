@@ -700,6 +700,33 @@ describe("extractRules", () => {
     expect(result.rules[0].id).toBe("RUL-001");
   });
 
+  it("extracts ID-based @rule-removed annotation", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(RUL-001, JIRA-456): Migrated to config service\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].id).toBe("RUL-001");
+    expect(result.removals[0].scope).toBe("");
+    expect(result.removals[0].ticket).toBe("JIRA-456");
+    expect(result.removals[0].reason).toBe("Migrated to config service");
+  });
+
+  it("extracts scope-based @rule-removed annotation (backward compat)", () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "test.ts"),
+      `// @rule-removed(billing.plans, JIRA-456): Migrated\nconst x = 1;\n`,
+    );
+    const result = extractRules(makeConfig(dir));
+    expect(result.removals).toHaveLength(1);
+    expect(result.removals[0].id).toBe("");
+    expect(result.removals[0].scope).toBe("billing.plans");
+    expect(result.removals[0].ticket).toBe("JIRA-456");
+  });
+
   it("@rule-removed works with scope-based matching (backward compat)", () => {
     const dir = tmp();
     writeFileSync(

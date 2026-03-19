@@ -74,6 +74,7 @@ export interface RuleDiff {
 export interface HistoryEntry {
   removedAt: string;
   rule: {
+    id: string;
     scope: string;
     severity: string;
     description: string;
@@ -88,6 +89,8 @@ export interface HistoryEntry {
 // ---------------------------------------------------------------------------
 
 export interface RuleRemoval {
+  /** Populated when first param matches ID pattern */
+  id: string;
   scope: string;
   ticket: string;
   reason: string;

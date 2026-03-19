@@ -235,7 +235,7 @@ describe("appendHistory", () => {
         line: 42,
       }),
     ];
-    const removals = [{ scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10 }];
+    const removals = [{ id: "", scope: "billing.plans", ticket: "JIRA-456", reason: "Migrated", file: "plans.ts", line: 10 }];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
     expect(result[0].acknowledged).toEqual({
@@ -258,13 +258,37 @@ describe("appendHistory", () => {
     const file = join(tmpDir, "dup-scope-history.json");
     const removed = [makeRule({ description: "dup test", fullScope: "billing.plans" })];
     const removals = [
-      { scope: "billing.plans", ticket: "JIRA-1", reason: "First", file: "a.ts", line: 1 },
-      { scope: "billing.plans", ticket: "JIRA-2", reason: "Second", file: "b.ts", line: 2 },
+      { id: "", scope: "billing.plans", ticket: "JIRA-1", reason: "First", file: "a.ts", line: 1 },
+      { id: "", scope: "billing.plans", ticket: "JIRA-2", reason: "Second", file: "b.ts", line: 2 },
     ];
     const result = appendHistory(file, removed, removals);
     expect(result).toHaveLength(1);
     expect(result[0].acknowledged?.ticket).toBe("JIRA-1");
     expect(result[0].acknowledged?.reason).toBe("First");
+  });
+
+  it("matches ID-based removal to removed rule by id", () => {
+    const file = join(tmpDir, "id-ack-history.json");
+    const removed = [
+      makeRule({
+        id: "RUL-001",
+        description: "id rule",
+        fullScope: "billing.plans",
+        severity: "critical",
+        file: "plans.ts",
+        line: 42,
+      }),
+    ];
+    const removals = [{ id: "RUL-001", scope: "", ticket: "JIRA-789", reason: "ID-based removal", file: "plans.ts", line: 5 }];
+    const result = appendHistory(file, removed, removals);
+    expect(result).toHaveLength(1);
+    expect(result[0].acknowledged).toEqual({
+      ticket: "JIRA-789",
+      reason: "ID-based removal",
+      file: "plans.ts",
+      line: 5,
+    });
+    expect(result[0].rule.id).toBe("RUL-001");
   });
 
   it("appends to existing history", () => {

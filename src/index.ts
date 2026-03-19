@@ -1,5 +1,5 @@
 export { ConfigError, resolveConfig } from "./config.js";
-export { appendHistory, computeDiff, contentFingerprint, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
+export { appendHistory, buildRemovalMaps, computeDiff, contentFingerprint, fingerprint, loadHistory, loadPreviousRules } from "./diff.js";
 export { loadGitignore } from "./gitignore.js";
 export { globToRegex, matchesAnyGlob } from "./glob.js";
 export { generateContext } from "./output/context.js";

@@ -32,6 +32,7 @@ function makeRule(overrides: Partial<Rule> = {}): Rule {
 
 function makeRemoval(overrides: Partial<RuleRemoval> = {}): RuleRemoval {
   return {
+    id: "",
     scope: "billing",
     ticket: "JIRA-1",
     reason: "migrated",
@@ -107,6 +108,25 @@ describe("checkProtection", () => {
   it("matches subscope removal to rule with matching fullScope", () => {
     const removed = [makeRule({ severity: "critical", fullScope: "billing.plans" })];
     const removals = [makeRemoval({ scope: "billing.plans" })];
+    const result = checkProtection(removed, removals, ["critical"]);
+    expect(result.blocked).toEqual([]);
+    expect(result.acknowledged).toHaveLength(1);
+  });
+
+  it("acknowledges protected rules by ID-based removal", () => {
+    const removed = [makeRule({ id: "RUL-001", severity: "critical", fullScope: "billing.plans" })];
+    const removals = [makeRemoval({ id: "RUL-001", scope: "", ticket: "JIRA-789" })];
+    const result = checkProtection(removed, removals, ["critical"]);
+    expect(result.blocked).toEqual([]);
+    expect(result.acknowledged).toHaveLength(1);
+  });
+
+  it("prefers ID-based match over scope-based match", () => {
+    const removed = [makeRule({ id: "RUL-001", severity: "critical", fullScope: "billing.plans" })];
+    const removals = [
+      makeRemoval({ id: "RUL-001", scope: "", ticket: "ID-TICKET" }),
+      makeRemoval({ id: "", scope: "billing.plans", ticket: "SCOPE-TICKET" }),
+    ];
     const result = checkProtection(removed, removals, ["critical"]);
     expect(result.blocked).toEqual([]);
     expect(result.acknowledged).toHaveLength(1);

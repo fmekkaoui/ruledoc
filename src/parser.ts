@@ -311,8 +311,11 @@ export function extractRules(config: RuledocConfig, cwd: string = process.cwd())
       // Check for @rule-removed annotation
       const removalMatch = removalRegex.exec(lines[i]);
       if (removalMatch) {
+        const firstParam = removalMatch[1].trim();
+        const isIdRemoval = idPatternRegex.test(firstParam);
         removals.push({
-          scope: removalMatch[1].trim(),
+          id: isIdRemoval ? firstParam.toUpperCase() : "",
+          scope: isIdRemoval ? "" : firstParam,
           ticket: removalMatch[2].trim(),
           reason: removalMatch[3].trim(),
           file: relFile,

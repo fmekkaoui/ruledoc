@@ -71,6 +71,23 @@ export function computeDiff(prev: Rule[], next: Rule[]): RuleDiff {
 }
 
 // ---------------------------------------------------------------------------
+// Removal lookup maps
+// ---------------------------------------------------------------------------
+
+export function buildRemovalMaps(removals: RuleRemoval[]): { byId: Map<string, RuleRemoval>; byScope: Map<string, RuleRemoval> } {
+  const byId = new Map<string, RuleRemoval>();
+  const byScope = new Map<string, RuleRemoval>();
+  for (const rem of removals) {
+    if (rem.id) {
+      if (!byId.has(rem.id)) byId.set(rem.id, rem);
+    } else if (!byScope.has(rem.scope)) {
+      byScope.set(rem.scope, rem);
+    }
+  }
+  return { byId, byScope };
+}
+
+// ---------------------------------------------------------------------------
 // History (tombstones)
 // ---------------------------------------------------------------------------
 
@@ -88,17 +105,13 @@ export function appendHistory(historyPath: string, removed: Rule[], removals: Ru
   const history = loadHistory(historyPath);
   const now = new Date().toISOString();
 
-  const removalByScope = new Map<string, RuleRemoval>();
-  for (const rem of removals) {
-    if (!removalByScope.has(rem.scope)) {
-      removalByScope.set(rem.scope, rem);
-    }
-  }
+  const { byId, byScope } = buildRemovalMaps(removals);
 
   for (const r of removed) {
     const entry: HistoryEntry = {
       removedAt: now,
       rule: {
+        id: r.id || "",
         scope: r.fullScope,
         severity: r.severity,
         description: r.description,
@@ -107,7 +120,7 @@ export function appendHistory(historyPath: string, removed: Rule[], removals: Ru
       },
     };
 
-    const ack = removalByScope.get(r.fullScope);
+    const ack = (r.id && byId.get(r.id)) || byScope.get(r.fullScope);
     if (ack) {
       entry.acknowledged = {
         ticket: ack.ticket,
